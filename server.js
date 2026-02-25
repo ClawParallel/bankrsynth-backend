@@ -8,39 +8,25 @@ app.use(cors());
 app.use(express.json());
 
 /////////////////////////////////////////////////
-// 🚀 BANKRSYNTH DEPLOY (REVENUE MODE)
+// 🚀 BANKRSYNTH DEPLOY — WALLET ONLY MODE
 /////////////////////////////////////////////////
 
 app.post("/launch", async (req, res) => {
   try {
-    const { name, symbol, description, recipient } = req.body;
+    const { name, symbol, description, wallet } = req.body;
+
+    //////////////////////////////////////////////////
+    // VALIDATION
+    //////////////////////////////////////////////////
 
     if (!name) {
       return res.status(400).json({ error: "Token name required" });
     }
 
-    if (!recipient) {
+    if (!wallet) {
       return res.status(400).json({
-        error: "Creator wallet or @X username required"
+        error: "Creator wallet address required"
       });
-    }
-
-    //////////////////////////////////////////////////
-    // AUTO DETECT RECIPIENT TYPE
-    //////////////////////////////////////////////////
-
-    let feeRecipient;
-
-    if (recipient.startsWith("@")) {
-      feeRecipient = {
-        type: "x",
-        value: recipient
-      };
-    } else {
-      feeRecipient = {
-        type: "wallet",
-        value: recipient
-      };
     }
 
     //////////////////////////////////////////////////
@@ -53,7 +39,11 @@ app.post("/launch", async (req, res) => {
         tokenName: name,
         tokenSymbol: symbol || name.slice(0, 4),
         description: description || "",
-        feeRecipient
+
+        feeRecipient: {
+          type: "wallet",
+          value: wallet
+        }
       },
       {
         headers: {
