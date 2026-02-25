@@ -8,6 +8,14 @@ app.use(cors());
 app.use(express.json());
 
 /////////////////////////////////////////////////
+// 🟢 HEALTH CHECK ROUTE (PENTING DI RAILWAY)
+/////////////////////////////////////////////////
+
+app.get("/", (req, res) => {
+  res.send("BankrSynth Backend Running 🚀");
+});
+
+/////////////////////////////////////////////////
 // 🚀 BANKRSYNTH DEPLOY — WALLET ONLY MODE
 /////////////////////////////////////////////////
 
@@ -66,7 +74,11 @@ app.post("/launch", async (req, res) => {
 });
 
 /////////////////////////////////////////////////
+// 🚀 START SERVER — RAILWAY SAFE
+/////////////////////////////////////////////////
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("BankrSynth Backend LIVE 🚀");
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`BankrSynth Backend LIVE 🚀 on port ${PORT}`);
 });
