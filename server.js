@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 /////////////////////////////////////////////////
-// 🚀 BANKR LAUNCH (Partner API)
+// 🚀 BANKR PARTNER TOKEN DEPLOY
 /////////////////////////////////////////////////
 
 app.post("/launch", async (req, res) => {
@@ -16,17 +16,24 @@ app.post("/launch", async (req, res) => {
     const { name, symbol, description } = req.body;
 
     const response = await axios.post(
-      "https://api.bankr.bot/token-launch",
+      "https://api.bankr.bot/token-launches/deploy",
       {
-        name,
-        symbol,
-        description,
-        chain: "base"
+        tokenName: name,
+        tokenSymbol: symbol,
+        description: description,
+
+        // 🔥 WAJIB untuk partner deploy
+        feeRecipient: {
+          type: "wallet",
+          value: process.env.FEE_WALLET
+        }
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.BANKR_API_KEY}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+
+          // 🔥 HEADER WAJIB DARI DOCS
+          "X-Partner-Key": process.env.BANKR_API_KEY
         }
       }
     );
@@ -34,8 +41,11 @@ app.post("/launch", async (req, res) => {
     res.json(response.data);
 
   } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Launch failed" });
+    console.error("BANKR ERROR:", err.response?.data || err.message);
+    res.status(500).json({
+      error: "Launch failed",
+      details: err.response?.data || err.message
+    });
   }
 });
 
