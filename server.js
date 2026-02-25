@@ -8,21 +8,27 @@ app.use(cors());
 app.use(express.json());
 
 /////////////////////////////////////////////////
-// 🚀 BANKR PARTNER TOKEN DEPLOY
+// 🚀 BANKR PARTNER TOKEN DEPLOY (FINAL)
 /////////////////////////////////////////////////
 
 app.post("/launch", async (req, res) => {
   try {
+    console.log("REQUEST BODY:", req.body);
+
     const { name, symbol, description } = req.body;
+
+    // 🔥 VALIDASI WAJIB
+    if (!name) {
+      return res.status(400).json({ error: "Token name required" });
+    }
 
     const response = await axios.post(
       "https://api.bankr.bot/token-launches/deploy",
       {
         tokenName: name,
-        tokenSymbol: symbol,
-        description: description,
+        tokenSymbol: symbol || name.slice(0, 4),
+        description: description || "",
 
-        // 🔥 WAJIB untuk partner deploy
         feeRecipient: {
           type: "wallet",
           value: process.env.FEE_WALLET
@@ -31,8 +37,6 @@ app.post("/launch", async (req, res) => {
       {
         headers: {
           "Content-Type": "application/json",
-
-          // 🔥 HEADER WAJIB DARI DOCS
           "X-Partner-Key": process.env.BANKR_API_KEY
         }
       }
