@@ -8,19 +8,44 @@ app.use(cors());
 app.use(express.json());
 
 /////////////////////////////////////////////////
-// 🚀 BANKR PARTNER TOKEN DEPLOY (FINAL)
+// 🚀 BANKRSYNTH DEPLOY (REVENUE MODE)
 /////////////////////////////////////////////////
 
 app.post("/launch", async (req, res) => {
   try {
-    console.log("REQUEST BODY:", req.body);
+    const { name, symbol, description, recipient } = req.body;
 
-    const { name, symbol, description } = req.body;
-
-    // 🔥 VALIDASI WAJIB
     if (!name) {
       return res.status(400).json({ error: "Token name required" });
     }
+
+    if (!recipient) {
+      return res.status(400).json({
+        error: "Creator wallet or @X username required"
+      });
+    }
+
+    //////////////////////////////////////////////////
+    // AUTO DETECT RECIPIENT TYPE
+    //////////////////////////////////////////////////
+
+    let feeRecipient;
+
+    if (recipient.startsWith("@")) {
+      feeRecipient = {
+        type: "x",
+        value: recipient
+      };
+    } else {
+      feeRecipient = {
+        type: "wallet",
+        value: recipient
+      };
+    }
+
+    //////////////////////////////////////////////////
+    // DEPLOY TOKEN VIA BANKR
+    //////////////////////////////////////////////////
 
     const response = await axios.post(
       "https://api.bankr.bot/token-launches/deploy",
@@ -28,11 +53,7 @@ app.post("/launch", async (req, res) => {
         tokenName: name,
         tokenSymbol: symbol || name.slice(0, 4),
         description: description || "",
-
-        feeRecipient: {
-          type: "wallet",
-          value: process.env.FEE_WALLET
-        }
+        feeRecipient
       },
       {
         headers: {
@@ -46,35 +67,11 @@ app.post("/launch", async (req, res) => {
 
   } catch (err) {
     console.error("BANKR ERROR:", err.response?.data || err.message);
+
     res.status(500).json({
       error: "Launch failed",
       details: err.response?.data || err.message
     });
-  }
-});
-
-/////////////////////////////////////////////////
-// 🧠 ARKHAM INTEL
-/////////////////////////////////////////////////
-
-app.post("/intel", async (req, res) => {
-  try {
-    const { address } = req.body;
-
-    const response = await axios.get(
-      `https://api.arkm.com/entity/${address}`,
-      {
-        headers: {
-          "API-Key": process.env.ARKHAM_API_KEY
-        }
-      }
-    );
-
-    res.json(response.data);
-
-  } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "Intel failed" });
   }
 });
 
