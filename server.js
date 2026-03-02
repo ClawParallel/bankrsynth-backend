@@ -69,12 +69,12 @@ app.post("/agent", async (req, res) => {
     const ai = await axios.post(
       "https://llm.bankr.bot/v1/chat/completions",
       {
-        model: "gpt-4o-mini",
+        model: "gpt-5-mini",
         messages: [
           {
             role: "system",
             content:
-              "You are an autonomous onchain launch agent. Respond ONLY in JSON with fields: name, symbol, description."
+              "You are BankrSynth autonomous onchain agent. If user asks about tokens or deployment, invent a creative token and respond ONLY in JSON with fields: name, symbol, description."
           },
           {
             role: "user",
