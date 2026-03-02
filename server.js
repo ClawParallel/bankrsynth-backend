@@ -8,7 +8,15 @@ app.use(cors());
 app.use(express.json());
 
 /////////////////////////////////////////////////
-// 🚀 MANUAL LAUNCH (UNCHANGED)
+// 🟢 HEALTHCHECK (WAJIB BUAT RAILWAY)
+/////////////////////////////////////////////////
+
+app.get("/", (req, res) => {
+  res.send("BankrSynth Backend LIVE 🚀");
+});
+
+/////////////////////////////////////////////////
+// 🚀 MANUAL LAUNCH MODULE
 /////////////////////////////////////////////////
 
 app.post("/launch", async (req, res) => {
@@ -22,7 +30,10 @@ app.post("/launch", async (req, res) => {
       tokenName: name,
       tokenSymbol: symbol || name.slice(0, 4),
       description: description || "",
-      feeRecipient: { type: "wallet", value: wallet }
+      feeRecipient: {
+        type: "wallet",
+        value: wallet
+      }
     };
 
     if (image) payload.image = image;
@@ -43,6 +54,8 @@ app.post("/launch", async (req, res) => {
     res.json(response.data);
 
   } catch (err) {
+    console.error("LAUNCH ERROR:", err.response?.data || err.message);
+
     res.status(500).json({
       error: "Launch failed",
       details: err.response?.data || err.message
@@ -51,15 +64,19 @@ app.post("/launch", async (req, res) => {
 });
 
 /////////////////////////////////////////////////
-// 🤖 TRUE AGENT MODE — REAL THINKING + DEPLOY
+// 🤖 TRUE AGENT MODE — THINK → DEPLOY
 /////////////////////////////////////////////////
 
 app.post("/agent", async (req, res) => {
   try {
     const { message } = req.body;
 
+    if (!message) {
+      return res.status(400).json({ error: "Message required" });
+    }
+
     //////////////////////////////////////////////////
-    // 🧠 STEP 1 — AGENT THINKS (LLM GATEWAY)
+    // 🧠 STEP 1 — AGENT THINKING VIA LLM
     //////////////////////////////////////////////////
 
     const ai = await axios.post(
@@ -89,15 +106,16 @@ app.post("/agent", async (req, res) => {
     const content = ai.data.choices[0].message.content;
 
     //////////////////////////////////////////////////
-    // 🧠 STEP 2 — PARSE AGENT IDEA
+    // 🧠 STEP 2 — PARSE JSON FROM AGENT
     //////////////////////////////////////////////////
 
     let parsed;
+
     try {
       parsed = JSON.parse(content);
     } catch {
       return res.status(400).json({
-        error: "Agent failed to generate valid JSON",
+        error: "Agent did not return valid JSON",
         raw: content
       });
     }
@@ -135,6 +153,8 @@ app.post("/agent", async (req, res) => {
     });
 
   } catch (err) {
+    console.error("AGENT ERROR:", err.response?.data || err.message);
+
     res.status(500).json({
       error: "Agent execution failed",
       details: err.response?.data || err.message
@@ -143,13 +163,11 @@ app.post("/agent", async (req, res) => {
 });
 
 /////////////////////////////////////////////////
-
-app.get("/", (req, res) => {
-  res.send("BankrSynth Backend LIVE 🚀");
-});
-
+// 🌐 START SERVER (RAILWAY SAFE)
 /////////////////////////////////////////////////
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("BankrSynth Backend LIVE 🚀");
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`BankrSynth Backend LIVE 🚀 on port ${PORT}`);
 });
