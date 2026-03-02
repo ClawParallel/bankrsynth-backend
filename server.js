@@ -13,32 +13,16 @@ app.use(express.json());
 
 app.post("/launch", async (req, res) => {
   try {
-    const {
-      name,
-      symbol,
-      description,
-      wallet,
-      image,
-      tweet,
-      website
-    } = req.body;
+    const { name, symbol, description, wallet, image, tweet, website } = req.body;
 
-    if (!name) {
-      return res.status(400).json({ error: "Token name required" });
-    }
-
-    if (!wallet) {
-      return res.status(400).json({ error: "Creator wallet required" });
-    }
+    if (!name) return res.status(400).json({ error: "Token name required" });
+    if (!wallet) return res.status(400).json({ error: "Creator wallet required" });
 
     const payload = {
       tokenName: name,
       tokenSymbol: symbol || name.slice(0, 4),
       description: description || "",
-      feeRecipient: {
-        type: "wallet",
-        value: wallet
-      }
+      feeRecipient: { type: "wallet", value: wallet }
     };
 
     if (image) payload.image = image;
@@ -59,7 +43,6 @@ app.post("/launch", async (req, res) => {
     res.json(response.data);
 
   } catch (err) {
-    console.error("BANKR ERROR:", err.response?.data || err.message);
     res.status(500).json({
       error: "Launch failed",
       details: err.response?.data || err.message
@@ -87,7 +70,7 @@ app.post("/agent", async (req, res) => {
           {
             role: "system",
             content:
-              "You are an autonomous onchain launch agent. If the user asks to deploy a token, invent one and respond ONLY in JSON with fields: name, symbol, description."
+              "You are an autonomous onchain launch agent. If user asks for a token idea or deployment, invent one and respond ONLY in JSON format with fields: name, symbol, description."
           },
           {
             role: "user",
@@ -98,7 +81,7 @@ app.post("/agent", async (req, res) => {
       {
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": process.env.BANKR_LLM_KEY
+          Authorization: `Bearer ${process.env.BANKR_LLM_KEY}`
         }
       }
     );
@@ -114,14 +97,10 @@ app.post("/agent", async (req, res) => {
       parsed = JSON.parse(content);
     } catch {
       return res.status(400).json({
-        error: "Agent failed to generate valid token idea",
+        error: "Agent failed to generate valid JSON",
         raw: content
       });
     }
-
-    const name = parsed.name;
-    const symbol = parsed.symbol;
-    const description = parsed.description;
 
     //////////////////////////////////////////////////
     // 🚀 STEP 3 — DEPLOY TOKEN IDEA
@@ -130,9 +109,9 @@ app.post("/agent", async (req, res) => {
     const deploy = await axios.post(
       "https://api.bankr.bot/token-launches/deploy",
       {
-        tokenName: name,
-        tokenSymbol: symbol,
-        description,
+        tokenName: parsed.name,
+        tokenSymbol: parsed.symbol || parsed.name.slice(0, 4),
+        description: parsed.description,
         feeRecipient: {
           type: "wallet",
           value: process.env.FEE_WALLET
@@ -156,8 +135,6 @@ app.post("/agent", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("AGENT ERROR:", err.response?.data || err.message);
-
     res.status(500).json({
       error: "Agent execution failed",
       details: err.response?.data || err.message
