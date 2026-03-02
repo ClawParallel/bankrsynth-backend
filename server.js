@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 /////////////////////////////////////////////////
-// 🟢 HEALTHCHECK (WAJIB BUAT RAILWAY)
+// HEALTH CHECK
 /////////////////////////////////////////////////
 
 app.get("/", (req, res) => {
@@ -16,7 +16,7 @@ app.get("/", (req, res) => {
 });
 
 /////////////////////////////////////////////////
-// 🚀 MANUAL LAUNCH MODULE
+// 🚀 MANUAL LAUNCH
 /////////////////////////////////////////////////
 
 app.post("/launch", async (req, res) => {
@@ -30,10 +30,7 @@ app.post("/launch", async (req, res) => {
       tokenName: name,
       tokenSymbol: symbol || name.slice(0, 4),
       description: description || "",
-      feeRecipient: {
-        type: "wallet",
-        value: wallet
-      }
+      feeRecipient: { type: "wallet", value: wallet }
     };
 
     if (image) payload.image = image;
@@ -54,8 +51,6 @@ app.post("/launch", async (req, res) => {
     res.json(response.data);
 
   } catch (err) {
-    console.error("LAUNCH ERROR:", err.response?.data || err.message);
-
     res.status(500).json({
       error: "Launch failed",
       details: err.response?.data || err.message
@@ -64,20 +59,12 @@ app.post("/launch", async (req, res) => {
 });
 
 /////////////////////////////////////////////////
-// 🤖 TRUE AGENT MODE — THINK → DEPLOY
+// 🤖 TRUE AGENT MODE
 /////////////////////////////////////////////////
 
 app.post("/agent", async (req, res) => {
   try {
     const { message } = req.body;
-
-    if (!message) {
-      return res.status(400).json({ error: "Message required" });
-    }
-
-    //////////////////////////////////////////////////
-    // 🧠 STEP 1 — AGENT THINKING VIA LLM
-    //////////////////////////////////////////////////
 
     const ai = await axios.post(
       "https://llm.bankr.bot/v1/chat/completions",
@@ -87,7 +74,7 @@ app.post("/agent", async (req, res) => {
           {
             role: "system",
             content:
-              "You are an autonomous onchain launch agent. If user asks for a token idea or deployment, invent one and respond ONLY in JSON format with fields: name, symbol, description."
+              "You are an autonomous onchain launch agent. Respond ONLY in JSON with fields: name, symbol, description."
           },
           {
             role: "user",
@@ -103,26 +90,7 @@ app.post("/agent", async (req, res) => {
       }
     );
 
-    const content = ai.data.choices[0].message.content;
-
-    //////////////////////////////////////////////////
-    // 🧠 STEP 2 — PARSE JSON FROM AGENT
-    //////////////////////////////////////////////////
-
-    let parsed;
-
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      return res.status(400).json({
-        error: "Agent did not return valid JSON",
-        raw: content
-      });
-    }
-
-    //////////////////////////////////////////////////
-    // 🚀 STEP 3 — DEPLOY TOKEN IDEA
-    //////////////////////////////////////////////////
+    const parsed = JSON.parse(ai.data.choices[0].message.content);
 
     const deploy = await axios.post(
       "https://api.bankr.bot/token-launches/deploy",
@@ -143,18 +111,12 @@ app.post("/agent", async (req, res) => {
       }
     );
 
-    //////////////////////////////////////////////////
-    // 📤 RETURN RESULT
-    //////////////////////////////////////////////////
-
     res.json({
       agentIdea: parsed,
       deployResult: deploy.data
     });
 
   } catch (err) {
-    console.error("AGENT ERROR:", err.response?.data || err.message);
-
     res.status(500).json({
       error: "Agent execution failed",
       details: err.response?.data || err.message
@@ -163,7 +125,7 @@ app.post("/agent", async (req, res) => {
 });
 
 /////////////////////////////////////////////////
-// 🌐 START SERVER (RAILWAY SAFE)
+// 🔥 IMPORTANT FOR RAILWAY
 /////////////////////////////////////////////////
 
 const PORT = process.env.PORT || 3000;
