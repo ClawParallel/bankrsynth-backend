@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 /////////////////////////////////////////////////
-// 🚀 BANKRSYNTH DEPLOY — FINAL VERSION
+// 🚀 MANUAL LAUNCH (UNCHANGED)
 /////////////////////////////////////////////////
 
 app.post("/launch", async (req, res) => {
@@ -23,25 +23,13 @@ app.post("/launch", async (req, res) => {
       website
     } = req.body;
 
-    //////////////////////////////////////////////////
-    // REQUIRED VALIDATION
-    //////////////////////////////////////////////////
-
     if (!name) {
-      return res.status(400).json({
-        error: "Token name required"
-      });
+      return res.status(400).json({ error: "Token name required" });
     }
 
     if (!wallet) {
-      return res.status(400).json({
-        error: "Creator wallet required"
-      });
+      return res.status(400).json({ error: "Creator wallet required" });
     }
-
-    //////////////////////////////////////////////////
-    // BUILD REQUEST BODY (OPTIONAL SAFE)
-    //////////////////////////////////////////////////
 
     const payload = {
       tokenName: name,
@@ -53,14 +41,9 @@ app.post("/launch", async (req, res) => {
       }
     };
 
-    // Optional metadata
     if (image) payload.image = image;
     if (tweet) payload.tweetUrl = tweet;
     if (website) payload.websiteUrl = website;
-
-    //////////////////////////////////////////////////
-    // CALL BANKR PARTNER API
-    //////////////////////////////////////////////////
 
     const response = await axios.post(
       "https://api.bankr.bot/token-launches/deploy",
@@ -68,7 +51,7 @@ app.post("/launch", async (req, res) => {
       {
         headers: {
           "Content-Type": "application/json",
-          "X-Partner-Key": process.env.BANKR_API_KEY
+          "X-Partner-Key": process.env.BANKR_PARTNER_KEY
         }
       }
     );
@@ -77,9 +60,106 @@ app.post("/launch", async (req, res) => {
 
   } catch (err) {
     console.error("BANKR ERROR:", err.response?.data || err.message);
-
     res.status(500).json({
       error: "Launch failed",
+      details: err.response?.data || err.message
+    });
+  }
+});
+
+/////////////////////////////////////////////////
+// 🤖 TRUE AGENT MODE — REAL THINKING + DEPLOY
+/////////////////////////////////////////////////
+
+app.post("/agent", async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    //////////////////////////////////////////////////
+    // 🧠 STEP 1 — AGENT THINKS (LLM GATEWAY)
+    //////////////////////////////////////////////////
+
+    const ai = await axios.post(
+      "https://llm.bankr.bot/v1/chat/completions",
+      {
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an autonomous onchain launch agent. If the user asks to deploy a token, invent one and respond ONLY in JSON with fields: name, symbol, description."
+          },
+          {
+            role: "user",
+            content: message
+          }
+        ]
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": process.env.BANKR_LLM_KEY
+        }
+      }
+    );
+
+    const content = ai.data.choices[0].message.content;
+
+    //////////////////////////////////////////////////
+    // 🧠 STEP 2 — PARSE AGENT IDEA
+    //////////////////////////////////////////////////
+
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      return res.status(400).json({
+        error: "Agent failed to generate valid token idea",
+        raw: content
+      });
+    }
+
+    const name = parsed.name;
+    const symbol = parsed.symbol;
+    const description = parsed.description;
+
+    //////////////////////////////////////////////////
+    // 🚀 STEP 3 — DEPLOY TOKEN IDEA
+    //////////////////////////////////////////////////
+
+    const deploy = await axios.post(
+      "https://api.bankr.bot/token-launches/deploy",
+      {
+        tokenName: name,
+        tokenSymbol: symbol,
+        description,
+        feeRecipient: {
+          type: "wallet",
+          value: process.env.FEE_WALLET
+        }
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Partner-Key": process.env.BANKR_PARTNER_KEY
+        }
+      }
+    );
+
+    //////////////////////////////////////////////////
+    // 📤 RETURN RESULT
+    //////////////////////////////////////////////////
+
+    res.json({
+      agentIdea: parsed,
+      deployResult: deploy.data
+    });
+
+  } catch (err) {
+    console.error("AGENT ERROR:", err.response?.data || err.message);
+
+    res.status(500).json({
+      error: "Agent execution failed",
       details: err.response?.data || err.message
     });
   }
