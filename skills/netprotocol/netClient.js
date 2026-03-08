@@ -1,7 +1,8 @@
 const { NetClient } = require("@net-protocol/core")
 
 const net = new NetClient({
-  rpc: "https://rpc.netprotocol.app"
+chainId: 8453, // Base mainnet
+rpc: "https://mainnet.base.org"
 })
 
 module.exports = net
