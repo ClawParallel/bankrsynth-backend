@@ -29,7 +29,7 @@ app.get("/", (req, res) => {
 });
 
 /////////////////////////////////////////////////
-// 🚀 MANUAL TOKEN LAUNCH (UNCHANGED)
+// 🚀 MANUAL TOKEN LAUNCH
 /////////////////////////////////////////////////
 
 app.post("/launch", async (req, res) => {
@@ -84,7 +84,7 @@ app.post("/launch", async (req, res) => {
 });
 
 /////////////////////////////////////////////////
-// 🤖 AGENT MODE (CHAT + DEPLOY)
+// 🤖 AGENT MODE (AI DEPLOY)
 /////////////////////////////////////////////////
 
 app.post("/agent", async (req, res) => {
@@ -94,44 +94,18 @@ app.post("/agent", async (req, res) => {
     const { message } = req.body;
 
     //////////////////////////////////////////////////
-    // LLM REQUEST
+    // LLM REASONING
     //////////////////////////////////////////////////
 
     const ai = await axios.post(
       "https://llm.bankr.bot/v1/chat/completions",
       {
         model: "gpt-5-mini",
-        temperature: 0.7,
-        max_tokens: 500,
         messages: [
           {
             role: "system",
-            content: `
-You are BankrSynth AI agent running on Base.
-
-You can:
-
-1) Chat with users about crypto, AI agents, Base ecosystem
-2) Deploy tokens using Bankr
-
-You MUST reply in JSON.
-
-If user wants to deploy a token:
-
-{
- "action":"deploy",
- "name":"token name",
- "symbol":"symbol",
- "description":"token description"
-}
-
-If user is chatting:
-
-{
- "action":"chat",
- "reply":"your message"
-}
-`
+            content:
+              "You are BankrSynth autonomous onchain agent. If user asks about tokens or deployment, invent a creative token and respond ONLY in JSON with fields: name, symbol, description."
           },
           {
             role: "user",
@@ -142,7 +116,7 @@ If user is chatting:
       {
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": process.env.BANKR_LLM_KEY
+          Authorization: `Bearer ${process.env.BANKR_LLM_KEY}`
         }
       }
     );
@@ -154,73 +128,44 @@ If user is chatting:
     let parsed;
 
     try {
-
-      const content = ai.data.choices[0].message.content;
-
-      parsed = JSON.parse(content);
-
-    } catch (err) {
-
-      return res.json({
-        type: "chat",
-        reply: ai.data.choices[0].message.content
+      parsed = JSON.parse(ai.data.choices[0].message.content);
+    } catch {
+      return res.status(400).json({
+        error: "Agent returned invalid JSON",
+        raw: ai.data.choices[0].message.content
       });
-
-    }
-
-    //////////////////////////////////////////////////
-    // CHAT RESPONSE
-    //////////////////////////////////////////////////
-
-    if (parsed.action === "chat") {
-
-      return res.json({
-        type: "chat",
-        reply: parsed.reply
-      });
-
     }
 
     //////////////////////////////////////////////////
     // DEPLOY TOKEN
     //////////////////////////////////////////////////
 
-    if (parsed.action === "deploy") {
-
-      const deploy = await axios.post(
-        "https://api.bankr.bot/token-launches/deploy",
-        {
-          tokenName: parsed.name,
-          tokenSymbol: parsed.symbol || parsed.name.slice(0, 4),
-          description: parsed.description,
-          feeRecipient: {
-            type: "wallet",
-            value: process.env.FEE_WALLET
-          }
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "X-Partner-Key": process.env.BANKR_PARTNER_KEY
-          }
+    const deploy = await axios.post(
+      "https://api.bankr.bot/token-launches/deploy",
+      {
+        tokenName: parsed.name,
+        tokenSymbol: parsed.symbol || parsed.name.slice(0, 4),
+        description: parsed.description,
+        feeRecipient: {
+          type: "wallet",
+          value: process.env.FEE_WALLET
         }
-      );
-
-      return res.json({
-        type: "deploy",
-        token: parsed,
-        result: deploy.data
-      });
-
-    }
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Partner-Key": process.env.BANKR_PARTNER_KEY
+        }
+      }
+    );
 
     //////////////////////////////////////////////////
-    // FALLBACK
+    // RESPONSE
     //////////////////////////////////////////////////
 
-    return res.json({
-      type: "chat",
-      reply: "I'm not sure what you want to do."
+    res.json({
+      agentIdea: parsed,
+      deployResult: deploy.data
     });
 
   } catch (err) {
