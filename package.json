@@ -4,7 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "npm install -g @net-protocol/cli && node server.js"
   },
   "keywords": [],
   "author": "",
