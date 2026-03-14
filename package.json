@@ -1,16 +1,23 @@
 {
-  "name": "backend",
+  "name": "bankrsynth-backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "BankrSynth autonomous agent backend",
   "main": "server.js",
-  "scripts": {
-    "start": "npm install -g @net-protocol/cli && node server.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "crypto",
+    "bankr",
+    "netprotocol"
+  ],
+  "author": "BankrSynth",
+  "license": "ISC",
   "dependencies": {
+    "@net-protocol/cli": "^0.1.9",
     "@net-protocol/core": "^0.1.9",
     "@net-protocol/feeds": "^0.1.15",
     "@net-protocol/profiles": "^0.1.9",

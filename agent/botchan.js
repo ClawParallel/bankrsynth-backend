@@ -36,7 +36,7 @@ return null
 
 function post(message){
 
-exec(`netp feed post general "${message}"`, (err, stdout) => {
+exec(`npx netp feed post general "${message}"`, (err, stdout) => {
 
 if(err){
 console.log("Botchan post error:", err.message)
