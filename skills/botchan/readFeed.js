@@ -1,22 +1,31 @@
-const { execSync } = require("child_process")
+const { exec } = require("child_process")
 
-async function readFeed(){
+function readFeed(){
+
+return new Promise((resolve)=>{
+
+exec("netp feed read general --limit 5 --json", (err, stdout)=>{
+
+if(err){
+console.log("Botchan read error:", err.message)
+return resolve([])
+}
 
 try{
 
-const output = execSync(
-"botchan read general --limit 5 --json"
-)
+const data = JSON.parse(stdout)
 
-return JSON.parse(output)
+resolve(data)
 
-}catch(err){
+}catch{
 
-console.log("Botchan read error:", err.message)
-
-return []
+resolve([])
 
 }
+
+})
+
+})
 
 }
 

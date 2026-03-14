@@ -1,24 +1,23 @@
-const { execSync } = require("child_process")
+const { exec } = require("child_process")
 
-async function postMessage(message){
+function postMessage(message){
 
-try{
+return new Promise((resolve)=>{
 
-console.log("Posting to Botchan:", message)
+exec(`netp feed post general "${message}"`, (err)=>{
 
-execSync(`botchan post general "${message}"`, {
-stdio:"inherit"
+if(err){
+console.log("Botchan post error:", err.message)
+return resolve(false)
+}
+
+console.log("Botchan reply sent")
+
+resolve(true)
+
 })
 
-return true
-
-}catch(err){
-
-console.log("Botchan post error:", err.message)
-
-return null
-
-}
+})
 
 }
 
