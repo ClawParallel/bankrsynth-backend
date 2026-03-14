@@ -100,7 +100,7 @@ app.post("/agent", async (req, res) => {
     const ai = await axios.post(
       "https://llm.bankr.bot/v1/chat/completions",
       {
-        model: "gemini-2.5-pro",
+        model: "gemini-2.5-flash",
         messages: [
           {
             role: "system",
