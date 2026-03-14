@@ -29,7 +29,7 @@ app.get("/", (req, res) => {
 });
 
 /////////////////////////////////////////////////
-// 🚀 MANUAL TOKEN LAUNCH
+// 🚀 MANUAL TOKEN LAUNCH (UNCHANGED)
 /////////////////////////////////////////////////
 
 app.post("/launch", async (req, res) => {
@@ -84,7 +84,7 @@ app.post("/launch", async (req, res) => {
 });
 
 /////////////////////////////////////////////////
-// 🤖 AGENT MODE (CHAT + DEPLOY TOKEN)
+// 🤖 AGENT MODE (CHAT + DEPLOY)
 /////////////////////////////////////////////////
 
 app.post("/agent", async (req, res) => {
@@ -94,34 +94,38 @@ app.post("/agent", async (req, res) => {
     const { message } = req.body;
 
     //////////////////////////////////////////////////
-    // LLM REASONING (Gemini via Bankr Gateway)
+    // LLM REQUEST
     //////////////////////////////////////////////////
 
     const ai = await axios.post(
       "https://llm.bankr.bot/v1/chat/completions",
       {
         model: "gpt-5-mini",
+        temperature: 0.7,
+        max_tokens: 500,
         messages: [
           {
             role: "system",
             content: `
-You are BankrSynth AI agent.
+You are BankrSynth AI agent running on Base.
 
-You can either:
+You can:
 
-1) Chat with users
-2) Deploy tokens
+1) Chat with users about crypto, AI agents, Base ecosystem
+2) Deploy tokens using Bankr
 
-If the user asks for token creation return JSON:
+You MUST reply in JSON.
+
+If user wants to deploy a token:
 
 {
  "action":"deploy",
  "name":"token name",
  "symbol":"symbol",
- "description":"description"
+ "description":"token description"
 }
 
-If the user is chatting return:
+If user is chatting:
 
 {
  "action":"chat",
@@ -138,7 +142,7 @@ If the user is chatting return:
       {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.BANKR_LLM_KEY}`
+          "X-API-Key": process.env.BANKR_LLM_KEY
         }
       }
     );
@@ -151,56 +155,61 @@ If the user is chatting return:
 
     try {
 
-      parsed = JSON.parse(ai.data.choices[0].message.content);
+      const content = ai.data.choices[0].message.content;
 
-    } catch {
+      parsed = JSON.parse(content);
+
+    } catch (err) {
 
       return res.json({
+        type: "chat",
         reply: ai.data.choices[0].message.content
       });
 
     }
 
     //////////////////////////////////////////////////
-    // CHAT MODE
+    // CHAT RESPONSE
     //////////////////////////////////////////////////
 
-    if(parsed.action === "chat"){
+    if (parsed.action === "chat") {
 
       return res.json({
+        type: "chat",
         reply: parsed.reply
       });
 
     }
 
     //////////////////////////////////////////////////
-    // DEPLOY MODE
+    // DEPLOY TOKEN
     //////////////////////////////////////////////////
 
-    if(parsed.action === "deploy"){
+    if (parsed.action === "deploy") {
 
       const deploy = await axios.post(
         "https://api.bankr.bot/token-launches/deploy",
         {
           tokenName: parsed.name,
-          tokenSymbol: parsed.symbol || parsed.name.slice(0,4),
+          tokenSymbol: parsed.symbol || parsed.name.slice(0, 4),
           description: parsed.description,
-          feeRecipient:{
-            type:"wallet",
-            value:process.env.FEE_WALLET
+          feeRecipient: {
+            type: "wallet",
+            value: process.env.FEE_WALLET
           }
         },
         {
-          headers:{
-            "Content-Type":"application/json",
-            "X-Partner-Key":process.env.BANKR_PARTNER_KEY
+          headers: {
+            "Content-Type": "application/json",
+            "X-Partner-Key": process.env.BANKR_PARTNER_KEY
           }
         }
       );
 
       return res.json({
-        agentIdea: parsed,
-        deployResult: deploy.data
+        type: "deploy",
+        token: parsed,
+        result: deploy.data
       });
 
     }
@@ -209,8 +218,9 @@ If the user is chatting return:
     // FALLBACK
     //////////////////////////////////////////////////
 
-    res.json({
-      reply:"I'm not sure what you want to do."
+    return res.json({
+      type: "chat",
+      reply: "I'm not sure what you want to do."
     });
 
   } catch (err) {
