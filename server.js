@@ -1,5 +1,17 @@
 require("dotenv").config();
-require("./cron")
+
+/////////////////////////////////////////////////
+// SAFE CRON LOADER (prevents backend crash)
+/////////////////////////////////////////////////
+
+try {
+  require("./cron");
+} catch (err) {
+  console.log("Cron disabled:", err.message);
+}
+
+/////////////////////////////////////////////////
+
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
@@ -17,21 +29,29 @@ app.get("/", (req, res) => {
 });
 
 /////////////////////////////////////////////////
-// 🚀 MANUAL LAUNCH
+// 🚀 MANUAL TOKEN LAUNCH
 /////////////////////////////////////////////////
 
 app.post("/launch", async (req, res) => {
   try {
     const { name, symbol, description, wallet, image, tweet, website } = req.body;
 
-    if (!name) return res.status(400).json({ error: "Token name required" });
-    if (!wallet) return res.status(400).json({ error: "Creator wallet required" });
+    if (!name) {
+      return res.status(400).json({ error: "Token name required" });
+    }
+
+    if (!wallet) {
+      return res.status(400).json({ error: "Creator wallet required" });
+    }
 
     const payload = {
       tokenName: name,
       tokenSymbol: symbol || name.slice(0, 4),
       description: description || "",
-      feeRecipient: { type: "wallet", value: wallet }
+      feeRecipient: {
+        type: "wallet",
+        value: wallet
+      }
     };
 
     if (image) payload.image = image;
@@ -52,20 +72,30 @@ app.post("/launch", async (req, res) => {
     res.json(response.data);
 
   } catch (err) {
+
+    console.error("Launch error:", err.response?.data || err.message);
+
     res.status(500).json({
       error: "Launch failed",
       details: err.response?.data || err.message
     });
+
   }
 });
 
 /////////////////////////////////////////////////
-// 🤖 TRUE AGENT MODE
+// 🤖 AGENT MODE (AI DEPLOY)
 /////////////////////////////////////////////////
 
 app.post("/agent", async (req, res) => {
+
   try {
+
     const { message } = req.body;
+
+    //////////////////////////////////////////////////
+    // LLM REASONING
+    //////////////////////////////////////////////////
 
     const ai = await axios.post(
       "https://llm.bankr.bot/v1/chat/completions",
@@ -91,7 +121,24 @@ app.post("/agent", async (req, res) => {
       }
     );
 
-    const parsed = JSON.parse(ai.data.choices[0].message.content);
+    //////////////////////////////////////////////////
+    // PARSE AI RESPONSE
+    //////////////////////////////////////////////////
+
+    let parsed;
+
+    try {
+      parsed = JSON.parse(ai.data.choices[0].message.content);
+    } catch {
+      return res.status(400).json({
+        error: "Agent returned invalid JSON",
+        raw: ai.data.choices[0].message.content
+      });
+    }
+
+    //////////////////////////////////////////////////
+    // DEPLOY TOKEN
+    //////////////////////////////////////////////////
 
     const deploy = await axios.post(
       "https://api.bankr.bot/token-launches/deploy",
@@ -112,21 +159,30 @@ app.post("/agent", async (req, res) => {
       }
     );
 
+    //////////////////////////////////////////////////
+    // RESPONSE
+    //////////////////////////////////////////////////
+
     res.json({
       agentIdea: parsed,
       deployResult: deploy.data
     });
 
   } catch (err) {
+
+    console.error("Agent error:", err.response?.data || err.message);
+
     res.status(500).json({
       error: "Agent execution failed",
       details: err.response?.data || err.message
     });
+
   }
+
 });
 
 /////////////////////////////////////////////////
-// 🔥 IMPORTANT FOR RAILWAY
+// SERVER START
 /////////////////////////////////////////////////
 
 const PORT = process.env.PORT || 3000;

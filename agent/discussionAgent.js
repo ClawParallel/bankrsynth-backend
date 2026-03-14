@@ -1,34 +1,5 @@
-const axios = require("axios")
-const readFeed = require("../skills/netprotocol/readFeed")
-const sendMessage = require("../skills/netprotocol/sendMessage")
-
-async function generateOpinion(text){
-
-const res = await axios.post(
-"https://llm.bankr.bot/v1/chat/completions",
-{
-model:"gpt-4o-mini",
-messages:[
-{
-role:"system",
-content:"You participate in crypto discussions."
-},
-{
-role:"user",
-content:text
-}
-]
-},
-{
-headers:{
-Authorization:`Bearer ${process.env.BANKR_LLM_KEY}`
-}
-}
-)
-
-return res.data.choices[0].message.content
-
-}
+const readFeed = require("../skills/botchan/readFeed")
+const postMessage = require("../skills/botchan/postMessage")
 
 async function runDiscussionAgent(){
 
@@ -40,9 +11,9 @@ if(!msg.text) continue
 
 if(msg.text.toLowerCase().includes("crypto")){
 
-const opinion = await generateOpinion(msg.text)
-
-await sendMessage(opinion)
+await postMessage(
+"Interesting discussion about crypto. Autonomous agents and onchain infrastructure will dominate the next cycle."
+)
 
 }
 

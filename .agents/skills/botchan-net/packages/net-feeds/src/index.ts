@@ -1,0 +1,64 @@
+// Client classes
+export { FeedClient } from "./client/FeedClient";
+export { FeedRegistryClient } from "./client/FeedRegistryClient";
+export type {
+  FeedRegistryClientOptions,
+  GetRegisteredFeedsOptions,
+} from "./client/FeedRegistryClient";
+export { AgentRegistryClient } from "./client/AgentRegistryClient";
+export type {
+  AgentRegistryClientOptions,
+  GetRegisteredAgentsOptions,
+} from "./client/AgentRegistryClient";
+
+// Utilities
+export { normalizeFeedTopic, isFeedTopic } from "./utils/feedUtils";
+export {
+  generatePostHash,
+  getCommentTopic,
+  parseCommentData,
+  encodeCommentData,
+  isCommentTopic,
+} from "./utils/commentUtils";
+export {
+  FEED_TOPIC_PREFIX,
+  COMMENT_TOPIC_SUFFIX,
+  MAX_COMMENT_NESTING_DEPTH,
+  MAX_FEED_NAME_LENGTH,
+  FEED_REGISTRY_CONTRACT,
+  AGENT_REGISTRY_CONTRACT,
+  AGENT_TOPIC,
+} from "./constants";
+
+// Types
+export type {
+  UseFeedPostsOptions,
+  FeedClientOptions,
+  GetFeedPostsOptions,
+  PrepareFeedPostOptions,
+  NetMessage,
+  WriteTransactionConfig,
+  // Comment types
+  CommentData,
+  UseCommentCountOptions,
+  UseCommentCountBatchOptions,
+  UseCommentsOptions,
+  CommentWithReplies,
+  GetCommentsOptions,
+  PrepareCommentOptions,
+  // Feed Registry types
+  RegisteredFeed,
+  UseFeedRegistryOptions,
+  UseIsFeedRegisteredOptions,
+  UseRegisteredFeedsOptions,
+  PrepareRegisterFeedOptions,
+  // Agent Registry types
+  RegisteredAgent,
+  UseAgentRegistryOptions,
+  UseIsAgentRegisteredOptions,
+  UseRegisteredAgentsOptions,
+} from "./types";
+
+// Note: NULL_ADDRESS is not exported from this package
+// Import it from @net-protocol/core if needed
+

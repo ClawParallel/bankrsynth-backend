@@ -1,0 +1,202 @@
+import chalk from "chalk";
+import type { CommonOptions, ReadOnlyOptions } from "../shared/types";
+
+/**
+ * Default chain ID (Base mainnet) - used by feed commands
+ */
+export const DEFAULT_CHAIN_ID = 8453;
+
+/**
+ * Get chain ID from option or environment variable, exit if not found
+ */
+function getRequiredChainId(optionValue?: number): number {
+  const chainId =
+    optionValue ||
+    (process.env.NET_CHAIN_ID
+      ? parseInt(process.env.NET_CHAIN_ID, 10)
+      : undefined);
+
+  if (!chainId) {
+    console.error(
+      chalk.red(
+        "Error: Chain ID is required. Provide via --chain-id flag or NET_CHAIN_ID environment variable"
+      )
+    );
+    process.exit(1);
+  }
+
+  return chainId;
+}
+
+/**
+ * Get chain ID from option or environment variable, defaulting to Base (8453)
+ * Also checks BOTCHAN_* env vars for backward compat
+ */
+function getChainIdWithDefault(optionValue?: number): number {
+  if (optionValue) {
+    return optionValue;
+  }
+
+  const envChainId =
+    process.env.BOTCHAN_CHAIN_ID || process.env.NET_CHAIN_ID;
+
+  if (envChainId) {
+    return parseInt(envChainId, 10);
+  }
+
+  return DEFAULT_CHAIN_ID;
+}
+
+/**
+ * Get RPC URL from option or environment variable
+ */
+function getRpcUrl(optionValue?: string): string | undefined {
+  return optionValue || process.env.NET_RPC_URL;
+}
+
+/**
+ * Get RPC URL from option or environment variable, also checking BOTCHAN_* env vars.
+ * Used only by feed commands for backward compat.
+ */
+function getRpcUrlWithBotchanFallback(optionValue?: string): string | undefined {
+  return optionValue || process.env.BOTCHAN_RPC_URL || process.env.NET_RPC_URL;
+}
+
+/**
+ * Parse and validate common options shared across all commands.
+ * Extracts private key, chain ID, and RPC URL from command options or environment variables.
+ * @param options - Command options
+ * @param supportsEncodeOnly - If true, mention --encode-only in error messages as an alternative
+ */
+export function parseCommonOptions(
+  options: {
+    privateKey?: string;
+    chainId?: number;
+    rpcUrl?: string;
+  },
+  supportsEncodeOnly = false
+): CommonOptions {
+  const privateKey =
+    options.privateKey ||
+    process.env.NET_PRIVATE_KEY ||
+    process.env.PRIVATE_KEY;
+
+  if (!privateKey) {
+    const encodeOnlyHint = supportsEncodeOnly
+      ? ", or use --encode-only to output transaction data without submitting"
+      : "";
+    console.error(
+      chalk.red(
+        `Error: Private key is required. Provide via --private-key flag or NET_PRIVATE_KEY/PRIVATE_KEY environment variable${encodeOnlyHint}`
+      )
+    );
+    process.exit(1);
+  }
+
+  if (!privateKey.startsWith("0x") || privateKey.length !== 66) {
+    console.error(
+      chalk.red(
+        "Error: Invalid private key format (must be 0x-prefixed, 66 characters)"
+      )
+    );
+    process.exit(1);
+  }
+
+  if (options.privateKey) {
+    console.warn(
+      chalk.yellow(
+        "Warning: Private key provided via command line. Consider using NET_PRIVATE_KEY environment variable instead."
+      )
+    );
+  }
+
+  return {
+    privateKey: privateKey as `0x${string}`,
+    chainId: getRequiredChainId(options.chainId),
+    rpcUrl: getRpcUrl(options.rpcUrl),
+  };
+}
+
+/**
+ * Parse and validate read-only options for commands that don't need a private key.
+ * Extracts chain ID and RPC URL from command options or environment variables.
+ */
+export function parseReadOnlyOptions(options: {
+  chainId?: number;
+  rpcUrl?: string;
+}): ReadOnlyOptions {
+  return {
+    chainId: getRequiredChainId(options.chainId),
+    rpcUrl: getRpcUrl(options.rpcUrl),
+  };
+}
+
+/**
+ * Parse read-only options with a default chain ID (8453/Base).
+ * Used by feed commands where chain ID is optional.
+ * Also checks BOTCHAN_* env vars for backward compat.
+ */
+export function parseReadOnlyOptionsWithDefault(options: {
+  chainId?: number;
+  rpcUrl?: string;
+}): ReadOnlyOptions {
+  return {
+    chainId: getChainIdWithDefault(options.chainId),
+    rpcUrl: getRpcUrlWithBotchanFallback(options.rpcUrl),
+  };
+}
+
+/**
+ * Parse common options with a default chain ID (8453/Base).
+ * Used by feed write commands where chain ID is optional.
+ * Also checks BOTCHAN_* env vars for backward compat.
+ */
+export function parseCommonOptionsWithDefault(
+  options: {
+    privateKey?: string;
+    chainId?: number;
+    rpcUrl?: string;
+  },
+  supportsEncodeOnly = false
+): CommonOptions {
+  const privateKey =
+    options.privateKey ||
+    process.env.BOTCHAN_PRIVATE_KEY ||
+    process.env.NET_PRIVATE_KEY ||
+    process.env.PRIVATE_KEY;
+
+  if (!privateKey) {
+    const encodeOnlyHint = supportsEncodeOnly
+      ? ", or use --encode-only to output transaction data without submitting"
+      : "";
+    console.error(
+      chalk.red(
+        `Error: Private key is required. Provide via --private-key flag or NET_PRIVATE_KEY/BOTCHAN_PRIVATE_KEY environment variable${encodeOnlyHint}`
+      )
+    );
+    process.exit(1);
+  }
+
+  if (!privateKey.startsWith("0x") || privateKey.length !== 66) {
+    console.error(
+      chalk.red(
+        "Error: Invalid private key format (must be 0x-prefixed, 66 characters)"
+      )
+    );
+    process.exit(1);
+  }
+
+  if (options.privateKey) {
+    console.warn(
+      chalk.yellow(
+        "Warning: Private key provided via command line. Consider using NET_PRIVATE_KEY environment variable instead."
+      )
+    );
+  }
+
+  return {
+    privateKey: privateKey as `0x${string}`,
+    chainId: getChainIdWithDefault(options.chainId),
+    rpcUrl: getRpcUrlWithBotchanFallback(options.rpcUrl),
+  };
+}

@@ -1,0 +1,147 @@
+import chalk from "chalk";
+import { StorageClient } from "@net-protocol/storage";
+import { createWalletClient, http, publicActions } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { base } from "viem/chains";
+import { getChainRpcUrls, getBaseDataSuffix } from "@net-protocol/core";
+import {
+  getProfileMetadataStorageArgs,
+  isValidBio,
+  STORAGE_CONTRACT,
+} from "@net-protocol/profiles";
+import { parseCommonOptions, parseReadOnlyOptions } from "../../cli/shared";
+import { exitWithError } from "../../shared/output";
+import { encodeTransaction } from "../../shared/encode";
+import { readExistingMetadata } from "./utils";
+import type { ProfileSetBioOptions } from "./types";
+
+/**
+ * Execute the profile set-bio command
+ */
+export async function executeProfileSetBio(
+  options: ProfileSetBioOptions
+): Promise<void> {
+  // Validate bio
+  if (!isValidBio(options.bio)) {
+    exitWithError(
+      `Invalid bio: "${options.bio}". Bio must be 1-280 characters and cannot contain control characters.`
+    );
+  }
+
+  // Handle encode-only mode (no private key required)
+  if (options.encodeOnly) {
+    const readOnlyOptions = parseReadOnlyOptions({
+      chainId: options.chainId,
+      rpcUrl: options.rpcUrl,
+    });
+
+    // If address provided, read existing metadata to preserve other fields
+    let existing: Awaited<ReturnType<typeof readExistingMetadata>> = {};
+    if (options.address) {
+      const storageClient = new StorageClient({
+        chainId: readOnlyOptions.chainId,
+        overrides: options.rpcUrl
+          ? { rpcUrls: [options.rpcUrl] }
+          : undefined,
+      });
+      existing = await readExistingMetadata(options.address, storageClient);
+    }
+
+    const storageArgs = getProfileMetadataStorageArgs({
+      bio: options.bio,
+      x_username: existing.x_username,
+      display_name: existing.display_name,
+      token_address: existing.token_address,
+    });
+    const encoded = encodeTransaction(
+      {
+        to: STORAGE_CONTRACT.address,
+        abi: STORAGE_CONTRACT.abi,
+        functionName: "put",
+        args: [storageArgs.bytesKey, storageArgs.topic, storageArgs.bytesValue],
+      },
+      readOnlyOptions.chainId
+    );
+    console.log(JSON.stringify(encoded, null, 2));
+    return;
+  }
+
+  // Parse common options (requires private key for transaction submission)
+  const commonOptions = parseCommonOptions(
+    {
+      privateKey: options.privateKey,
+      chainId: options.chainId,
+      rpcUrl: options.rpcUrl,
+    },
+    true // supports --encode-only
+  );
+
+  try {
+    // Create wallet client
+    const account = privateKeyToAccount(commonOptions.privateKey);
+    const rpcUrls = getChainRpcUrls({
+      chainId: commonOptions.chainId,
+      rpcUrl: commonOptions.rpcUrl,
+    });
+
+    const client = createWalletClient({
+      account,
+      chain: base, // TODO: Support other chains
+      transport: http(rpcUrls[0]),
+      dataSuffix: getBaseDataSuffix(commonOptions.chainId),
+    }).extend(publicActions);
+
+    console.log(chalk.blue(`Setting profile bio...`));
+    console.log(chalk.gray(`   Bio: ${options.bio}`));
+    console.log(chalk.gray(`   Address: ${account.address}`));
+
+    // Read existing metadata to preserve other fields
+    const storageClient = new StorageClient({
+      chainId: commonOptions.chainId,
+      overrides: commonOptions.rpcUrl
+        ? { rpcUrls: [commonOptions.rpcUrl] }
+        : undefined,
+    });
+    const existing = await readExistingMetadata(
+      account.address,
+      storageClient
+    );
+
+    // Merge: update bio, preserve other fields
+    const storageArgs = getProfileMetadataStorageArgs({
+      bio: options.bio,
+      x_username: existing.x_username,
+      display_name: existing.display_name,
+      token_address: existing.token_address,
+    });
+
+    // Submit transaction
+    const hash = await client.writeContract({
+      address: STORAGE_CONTRACT.address as `0x${string}`,
+      abi: STORAGE_CONTRACT.abi,
+      functionName: "put",
+      args: [storageArgs.bytesKey, storageArgs.topic, storageArgs.bytesValue],
+    });
+
+    console.log(chalk.blue(`Waiting for confirmation...`));
+
+    // Wait for transaction
+    const receipt = await client.waitForTransactionReceipt({ hash });
+
+    if (receipt.status === "success") {
+      console.log(
+        chalk.green(
+          `\nBio updated successfully!\n  Transaction: ${hash}\n  Bio: ${options.bio}`
+        )
+      );
+    } else {
+      exitWithError(`Transaction failed: ${hash}`);
+    }
+  } catch (error) {
+    exitWithError(
+      `Failed to set bio: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  }
+}

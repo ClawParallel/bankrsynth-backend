@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "botchan-net": {
+      "source": "stuckinaboot/net-public",
+      "sourceType": "github",
+      "computedHash": "93cf3da339485c870ce5ef51cb1b3d478690805a6a5abcf0b7db7ecc56bfa9ae"
+    }
+  }
+}

@@ -1,24 +1,29 @@
+const readFeed = require("../skills/botchan/readFeed")
+const postMessage = require("../skills/botchan/postMessage")
 const axios = require("axios")
-const readFeed = require("../skills/netprotocol/readFeed")
-const sendMessage = require("../skills/netprotocol/sendMessage")
 
-const { saveMessage } = require("../memory/chatMemory")
-const { updateUser } = require("../memory/userMemory")
+async function runCommunityAgent(){
 
-async function generateReply(message){
+const feed = await readFeed()
 
-const response = await axios.post(
+for(const msg of feed){
+
+if(!msg.text) continue
+
+if(msg.text.toLowerCase().includes("bankrsynth")){
+
+const reply = await axios.post(
 "https://llm.bankr.bot/v1/chat/completions",
 {
-model:"gpt-4o-mini",
+model:"gpt-5-mini",
 messages:[
 {
 role:"system",
-content:"You are BankrSynth, a friendly AI agent helping builders."
+content:"You are BankrSynth AI agent helping builders in crypto."
 },
 {
 role:"user",
-content:message
+content:msg.text
 }
 ]
 },
@@ -29,26 +34,7 @@ Authorization:`Bearer ${process.env.BANKR_LLM_KEY}`
 }
 )
 
-return response.data.choices[0].message.content
-
-}
-
-async function runCommunityAgent(){
-
-const messages = await readFeed()
-
-for(const msg of messages){
-
-if(!msg.text) continue
-
-if(msg.text.toLowerCase().includes("bankrsynth")){
-
-saveMessage(msg.user,msg.text)
-updateUser(msg.user,msg.text)
-
-const reply = await generateReply(msg.text)
-
-await sendMessage(reply)
+await postMessage(reply.data.choices[0].message.content)
 
 }
 

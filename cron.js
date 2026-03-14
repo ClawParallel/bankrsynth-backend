@@ -1,46 +1,46 @@
 const cron = require("node-cron")
 
-// ===== EXISTING AGENT =====
 const runAutonomousAgent = require("./agent/autonomousAgent")
-
-// ===== NEW NET AGENT =====
 const runNetBrain = require("./agent/netBrain")
 
-//////////////////////////////////////////////////
-// AUTONOMOUS DEPLOY (1 HOUR)
-//////////////////////////////////////////////////
+// =============================
+// TOKEN DEPLOY AGENT
+// setiap 1 jam
+// =============================
 
 cron.schedule("0 * * * *", async () => {
 
-console.log("Running scheduled deploy")
+try {
 
-try{
+console.log("Running scheduled deploy")
 
 await runAutonomousAgent()
 
-}catch(err){
+} catch (err) {
 
-console.error("Autonomous deploy error:", err)
+console.error("Autonomous Agent error:", err.message)
 
 }
 
 })
 
-//////////////////////////////////////////////////
-// NET COMMUNITY AGENT (EVERY 2 MINUTES)
-//////////////////////////////////////////////////
+
+// =============================
+// NET PROTOCOL COMMUNITY AGENT
+// setiap 2 menit
+// =============================
 
 cron.schedule("*/2 * * * *", async () => {
 
-console.log("BankrSynth Net Brain scanning feed")
+try {
 
-try{
+console.log("BankrSynth Net Brain scanning feed")
 
 await runNetBrain()
 
-}catch(err){
+} catch (err) {
 
-console.error("Net Brain error:", err)
+console.error("Net Brain error:", err.message)
 
 }
 
