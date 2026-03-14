@@ -27,7 +27,7 @@ console.log("Autonomous agent error:", err.message)
 // community / discussion / knowledge agents
 /////////////////////////////////////////////////
 
-cron.schedule("*/2 * * * *", async () => {
+cron.schedule("*/25 * * * *", async () => {
 
 console.log("BankrSynth Net Brain scanning feed")
 
@@ -44,7 +44,7 @@ console.log("Net brain error:", err.message)
 // posting AI discussion di Botchan
 /////////////////////////////////////////////////
 
-cron.schedule("*/7 * * * *", async () => {
+cron.schedule("*/30 * * * *", async () => {
 
 console.log("BankrSynth Botchan agent running")
 
