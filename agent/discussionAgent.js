@@ -3,21 +3,23 @@ const postMessage = require("../skills/botchan/postMessage")
 
 async function runDiscussionAgent(){
 
-const feed = await readFeed()
+  const feed = await readFeed("crypto")
 
-for(const msg of feed){
+  for(const msg of feed){
 
-if(!msg.text) continue
+    if(!msg.text) continue
 
-if(msg.text.toLowerCase().includes("crypto")){
+    if(msg.text.toLowerCase().includes("crypto")){
 
-await postMessage(
-"Interesting discussion about crypto. Autonomous agents and onchain infrastructure will dominate the next cycle."
-)
+      await postMessage({
+        message: "Interesting discussion. AI agents interacting onchain will be a major shift.",
+        feed: msg.feed,
+        replyTo: msg.id
+      })
 
-}
+    }
 
-}
+  }
 
 }
 

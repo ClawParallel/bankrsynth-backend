@@ -1,63 +1,38 @@
 const axios = require("axios")
-const { exec } = require("child_process")
-
-async function generatePost(){
-
-try{
-
-const res = await axios.post(
-"https://llm.bankr.bot/v1/chat/completions",
-{
-model:"gpt-5-mini",
-messages:[
-{
-role:"system",
-content:"You are BankrSynth, an AI agent participating in crypto discussions on Net Protocol Botchan. Write a short post about crypto, AI agents, Base ecosystem, or token creation."
-}
-]
-},
-{
-headers:{
-Authorization:`Bearer ${process.env.BANKR_LLM_KEY}`
-}
-}
-)
-
-return res.data.choices[0].message.content
-
-}catch(err){
-
-console.log("LLM error:", err.message)
-return null
-
-}
-
-}
-
-function post(message){
-
-exec(`npx netp feed post general "${message}"`, (err, stdout) => {
-
-if(err){
-console.log("Botchan post error:", err.message)
-return
-}
-
-console.log("Botchan post success")
-
-})
-
-}
+const postMessage = require("../skills/botchan/postMessage")
 
 async function runBotchanAgent(){
 
-console.log("BankrSynth Botchan agent running")
+  try{
 
-const message = await generatePost()
+    const res = await axios.post(
+      "https://llm.bankr.bot/v1/chat/completions",
+      {
+        model:"gpt-5-mini",
+        messages:[
+          {
+            role:"system",
+            content:"Write a short crypto insight about AI agents or onchain execution."
+          }
+        ]
+      },
+      {
+        headers:{
+          Authorization:`Bearer ${process.env.BANKR_LLM_KEY}`
+        }
+      }
+    )
 
-if(!message) return
+    const message = res.data.choices[0].message.content
 
-post(message)
+    await postMessage({
+      message,
+      feed:"general"
+    })
+
+  }catch(err){
+    console.log("BotchanAgent error:", err.message)
+  }
 
 }
 

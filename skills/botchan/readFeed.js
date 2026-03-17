@@ -1,30 +1,35 @@
 const { exec } = require("child_process")
 
-function readFeed(){
-
-return new Promise((resolve)=>{
-
-exec("npx netp feed read general --limit 5 --json", (err, stdout)=>{
-
-if(err){
-console.log("Botchan read error:", err.message)
-return resolve([])
+function run(cmd){
+  return new Promise((resolve, reject)=>{
+    exec(cmd, (err, stdout)=>{
+      if(err) return reject(err)
+      resolve(stdout)
+    })
+  })
 }
 
-try{
+async function readFeed(feed = "general"){
 
-const data = JSON.parse(stdout)
-resolve(data)
+  try{
 
-}catch{
+    const output = await run(`npx netp feed read ${feed} --limit 5 --json`)
 
-resolve([])
+    const parsed = JSON.parse(output)
 
-}
+    return parsed.map(msg => ({
+      id: msg.id,
+      text: msg.text,
+      feed: feed,
+      author: msg.author
+    }))
 
-})
+  }catch(err){
 
-})
+    console.log("Botchan read error:", err.message)
+    return []
+
+  }
 
 }
 

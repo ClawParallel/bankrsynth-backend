@@ -1,69 +1,54 @@
 const axios = require("axios")
-
 const readFeed = require("../skills/botchan/readFeed")
-const sendMessage = require("../skills/botchan/postMessage")
-
-async function answerQuestion(question){
-
-try{
-
-const res = await axios.post(
-"https://llm.bankr.bot/v1/chat/completions",
-{
-model:"gpt-5-mini",
-messages:[
-{
-role:"system",
-content:"You explain crypto tools clearly."
-},
-{
-role:"user",
-content:question
-}
-]
-},
-{
-headers:{
-Authorization:`Bearer ${process.env.BANKR_LLM_KEY}`
-}
-}
-)
-
-return res.data.choices[0].message.content
-
-}catch(err){
-
-console.error("Knowledge error:", err.message)
-return null
-
-}
-
-}
+const postMessage = require("../skills/botchan/postMessage")
 
 async function runKnowledgeAgent(){
 
-const messages = await readFeed()
+  const feed = await readFeed("general")
 
-if(!messages || messages.length === 0){
-console.log("KnowledgeAgent: no questions")
-return
-}
+  for(const msg of feed){
 
-for(const msg of messages){
+    if(!msg.text) continue
 
-if(!msg.text) continue
+    if(!msg.text.includes("?")) continue
 
-if(msg.text.includes("?")){
+    try{
 
-const answer = await answerQuestion(msg.text)
+      const res = await axios.post(
+        "https://llm.bankr.bot/v1/chat/completions",
+        {
+          model:"gpt-5-mini",
+          messages:[
+            {
+              role:"system",
+              content:"Explain crypto concepts clearly."
+            },
+            {
+              role:"user",
+              content:msg.text
+            }
+          ]
+        },
+        {
+          headers:{
+            Authorization:`Bearer ${process.env.BANKR_LLM_KEY}`
+          }
+        }
+      )
 
-if(answer){
-await sendMessage(answer)
-}
+      const answer = res.data.choices[0].message.content
 
-}
+      await postMessage({
+        message: answer,
+        feed: msg.feed,
+        replyTo: msg.id
+      })
 
-}
+    }catch(err){
+      console.log("KnowledgeAgent error:", err.message)
+    }
+
+  }
 
 }
 
