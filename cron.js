@@ -53,7 +53,7 @@ cron.schedule("0 * * * *", async () => {
 
 /////////////////////////////////////////////////
 // 🧠 Net Brain
-// lebih responsif (10 menit sekali)
+// responsif (10 menit sekali)
 /////////////////////////////////////////////////
 
 cron.schedule("*/10 * * * *", async () => {
@@ -70,23 +70,24 @@ cron.schedule("*/10 * * * *", async () => {
 
 /////////////////////////////////////////////////
 // 🤖 Botchan AI Agent
-// 5x sehari (natural behavior)
+// HOURLY (behavior-based, bukan jadwal kaku)
 /////////////////////////////////////////////////
 
-// pagi
-cron.schedule("0 8 * * *", runWithRandomDelay)
+cron.schedule("0 * * * *", async () => {
 
-// siang
-cron.schedule("0 12 * * *", runWithRandomDelay)
+  console.log("BankrSynth hourly behavior check")
 
-// sore
-cron.schedule("0 16 * * *", runWithRandomDelay)
+  try{
 
-// malam
-cron.schedule("0 20 * * *", runWithRandomDelay)
+    await runWithRandomDelay()
 
-// larut
-cron.schedule("0 23 * * *", runWithRandomDelay)
+  }catch(err){
+
+    console.log("Botchan error:", err.message)
+
+  }
+
+})
 
 /////////////////////////////////////////////////
 
