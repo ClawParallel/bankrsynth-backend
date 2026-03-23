@@ -1,38 +1,53 @@
 ---
-name: bankrsynth
-description: Execution agent that turns user intent into on-chain actions via Bankr
+
+name: deploy-token-pro
+description: Use this when user wants to deploy a token with validation, metadata formatting, and execution.
+
+Deploy Token Pro Skill
+
+Purpose
+
+This skill helps deploy a token with proper validation and structured execution.
+
 ---
 
-# BankrSynth Skill
+Step 1: Collect Required Inputs
 
-## Overview
-BankrSynth is an execution agent built on top of Bankr.
+Ask the user for:
 
-It allows users to go from idea to on-chain execution without manual steps.
+- Token Name
+- Token Symbol
+- Description (optional but recommended)
+- Image URL (must be PNG)
+- Website (optional)
+- Twitter (optional)
+- Wallet Address (deployer)
 
-The agent can:
-- analyze token ideas
-- generate narratives and tickers
-- deploy tokens via Bankr
+If any required field is missing → ask again.
 
-## When to use
-Use this skill when the user wants to:
-- deploy a token
-- explore token ideas
-- execute actions on-chain
+---
 
-## Steps
-1. Understand user intent
-2. Generate structured output (name, ticker, description)
-3. Execute via Bankr
-4. Return result (contract address, tx)
+Step 2: Validate Inputs
 
-## Example prompts
-- deploy a meme token
-- what token should I launch
-- create something based on AI agents
+- Token Name: minimum 2 characters
+- Symbol: max 6 uppercase letters
+- Image must be PNG
+- Wallet must be valid 0x address
 
-## Notes
-- runs on Bankr infrastructure
-- optimized for execution
-- supports autonomous workflows
+---
+
+Step 3: Execute Deployment
+
+Send request to backend:
+
+POST /launch
+
+---
+
+Step 4: Handle Response
+
+- Return contract address
+- Confirm success
+- Handle errors clearly
+
+---

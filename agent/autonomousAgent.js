@@ -4,25 +4,54 @@ const deployToken = require("./deployToken")
 
 async function runAutonomousAgent(){
 
-console.log("Running BankrSynth autonomous agent")
+console.log("🤖 Running BankrSynth autonomous agent...\n")
 
 try{
 
+/////////////////////////////////////////////////
+// STEP 1: IDEA
+/////////////////////////////////////////////////
+
 const idea = await generateTokenIdea()
+console.log("🧠 Idea generated:", idea)
 
-console.log("Token idea:", idea)
+/////////////////////////////////////////////////
+// STEP 2: IMAGE
+/////////////////////////////////////////////////
 
-const image = await generateImage(idea.name)
+let image = null
+
+try{
+image = await generateImage(idea.name)
+console.log("🎨 Image generated:", image)
+}catch(err){
+console.log("⚠️ Image generation failed, skipping:", err.message)
+}
 
 idea.image = image
 
+/////////////////////////////////////////////////
+// STEP 3: DEPLOY
+/////////////////////////////////////////////////
+
 const deploy = await deployToken(idea)
 
-console.log("Token deployed:", deploy)
+console.log("🚀 Token deployed successfully:")
+console.log(deploy)
+
+return {
+idea,
+deploy
+}
 
 }catch(err){
 
-console.log("Agent error:", err.message)
+console.error("💥 Agent failed:", err.message)
+
+return {
+success:false,
+error:err.message
+}
 
 }
 
