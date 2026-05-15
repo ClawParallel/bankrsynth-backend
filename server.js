@@ -15,10 +15,24 @@ console.log("Cron disabled:", err.message);
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
+const logger = require("./utils/synthLogger");
+
+// ─── GITLAWB ROUTES ──────────────────────────
+const gitlawbRoutes = require("./routes/gitlawb");
+const terminalRoutes = require("./routes/terminal");
+const synthRoutes = require("./routes/synth");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+/////////////////////////////////////////////////
+// GITLAWB + SYNTH TERMINAL ROUTES
+/////////////////////////////////////////////////
+
+app.use("/gitlawb", gitlawbRoutes);
+app.use("/terminal", terminalRoutes);
+app.use("/synth", synthRoutes);
 
 /////////////////////////////////////////////////
 // 🧠 VALIDATORS
@@ -69,7 +83,21 @@ return res.data;
 /////////////////////////////////////////////////
 
 app.get("/", (req, res) => {
-res.send("BankrSynth Backend LIVE 🚀");
+res.json({
+  name: "BankrSynth",
+  status: "LIVE",
+  version: "2.0.0",
+  features: ["token-launch", "gitlawb", "coding-agent", "terminal-stream"],
+  endpoints: {
+    health: "GET /",
+    launch: "POST /launch",
+    agent: "POST /agent",
+    skill: "POST /execute-skill",
+    gitlawb: "GET /gitlawb/*",
+    synth: "POST /synth/exec",
+    terminal: "GET /terminal/stream (SSE)",
+  },
+});
 });
 
 /////////////////////////////////////////////////
@@ -215,6 +243,7 @@ app.post("/execute-skill", async (req, res) => {
 try {
 const { skill, input } = req.body;
 
+// ─── Existing Skills ───────────────────────
 if (skill === "deploy-token") {
   const result = await deployToken({
     name: input.name,
@@ -225,26 +254,39 @@ if (skill === "deploy-token") {
     tweet: input.tweet,
     website: input.website
   });
+  return res.json({ success: true, skill, result });
+}
 
+// ─── GitLawb Skills ────────────────────────
+if (skill && skill.startsWith("gitlawb-")) {
+  const { executeSkill } = require("./skills/gitlawb/index");
+  const result = await executeSkill(skill, input || {});
+  return res.json({ success: true, skill, result });
+}
+
+// ─── List Skills ───────────────────────────
+if (skill === "list") {
+  const { listSkills } = require("./skills/gitlawb/index");
   return res.json({
     success: true,
-    skill,
-    result
+    skills: [
+      { name: "deploy-token", description: "Deploy a memecoin token on Base" },
+      ...listSkills(),
+    ],
   });
 }
 
 return res.status(400).json({
-  error: "Unknown skill"
+  error: "Unknown skill",
+  hint: "Use skill='list' to see available skills",
 });
 
 } catch (err) {
 console.error("Skill error:", err.response?.data || err.message);
-
 res.status(500).json({
   error: "Skill execution failed",
   details: err.response?.data || err.message
 });
-
 }
 });
 
@@ -255,5 +297,11 @@ res.status(500).json({
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, "0.0.0.0", () => {
-console.log("🚀 BankrSynth Backend LIVE on port ${PORT}");
+logger.banner();
+logger.boot(`BankrSynth Backend LIVE on port ${PORT}`);
+logger.ok("GitLawb integration module loaded");
+logger.ok("Synth terminal routes active");
+logger.info(`Terminal stream: GET http://localhost:${PORT}/terminal/stream`);
+logger.info(`GitLawb API:     POST http://localhost:${PORT}/gitlawb/*`);
+logger.info(`Synth commands:  POST http://localhost:${PORT}/synth/exec`);
 });
