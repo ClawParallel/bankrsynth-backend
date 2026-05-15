@@ -1,0 +1,18 @@
+{
+  "name": "BankrSynth",
+  "description": "Autonomous onchain execution engine for AI token deployment",
+  "image": "https://raw.githubusercontent.com/ClawParallel/bankrsynth-backend/main/7DMknQKL_400x400.jpg",
+  "agentHarness": "other",
+  "agentHarnessOther": "custom-node-agent-backend",
+  "model": "gpt-5-mini",
+  "humanInfo": {
+    "name": "RIZKIBEGITU",
+    "email": "huragizuki@gmail.com",
+    "socialMediaHandle": "@rizkybegitu",
+    "background": "builder",
+    "cryptoExperience": "yes",
+    "aiAgentExperience": "yes",
+    "codingComfort": 8,
+    "problemToSolve": "Automating token deployment using AI agents"
+  }
+}

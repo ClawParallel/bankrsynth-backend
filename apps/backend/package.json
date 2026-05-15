@@ -1,0 +1,31 @@
+{
+  "name": "@bankrsynth/backend",
+  "version": "2.0.0",
+  "description": "BankrSynth autonomous agent backend — AI-native development terminal",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js",
+    "lint": "echo 'no linter'",
+    "clean": "rm -rf node_modules"
+  },
+  "keywords": ["ai", "agent", "crypto", "bankr", "gitlawb"],
+  "author": "BankrSynth",
+  "license": "ISC",
+  "dependencies": {
+    "@bankrsynth/shared": "workspace:*",
+    "@net-protocol/cli": "^0.1.9",
+    "@net-protocol/core": "^0.1.9",
+    "@net-protocol/feeds": "^0.1.15",
+    "@net-protocol/profiles": "^0.1.9",
+    "@net-protocol/score": "^0.1.4",
+    "axios": "^1.13.6",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "node-cron": "^4.2.1",
+    "socket.io": "^4.7.0",
+    "viem": "^2.47.0"
+  }
+}
