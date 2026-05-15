@@ -1,0 +1,31 @@
+{
+  "name": "@bankrsynth/synth-sdk",
+  "version": "1.0.0",
+  "description": "BankrSynth client SDK — typed REST + WebSocket client for frontend apps",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --external socket.io-client",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch --external socket.io-client",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@bankrsynth/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "socket.io-client": "^4.7.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "socket.io-client": "^4.7.0"
+  }
+}

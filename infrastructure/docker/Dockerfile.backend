@@ -1,0 +1,47 @@
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9 --activate
+WORKDIR /app
+
+# ─── Install dependencies ─────────────────────────────────────
+FROM base AS deps
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/terminal/package.json ./packages/terminal/
+COPY packages/agents/package.json ./packages/agents/
+COPY apps/backend/package.json ./apps/backend/
+RUN pnpm install --frozen-lockfile --filter @bankrsynth/backend...
+
+# ─── Build shared packages ────────────────────────────────────
+FROM deps AS builder
+COPY packages/ ./packages/
+COPY apps/backend/ ./apps/backend/
+RUN pnpm run --filter @bankrsynth/shared build || true
+RUN pnpm run --filter @bankrsynth/terminal build || true
+RUN pnpm run --filter @bankrsynth/agents build || true
+
+# ─── Production image ─────────────────────────────────────────
+FROM node:20-alpine AS runner
+RUN corepack enable && corepack prepare pnpm@9 --activate
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Install only production deps
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/apps/backend ./apps/backend
+
+# Create non-root user
+RUN addgroup -S bankrsynth && adduser -S agent -G bankrsynth
+RUN mkdir -p /app/apps/backend/data && chown -R agent:bankrsynth /app
+USER agent
+
+WORKDIR /app/apps/backend
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:3000/ || exit 1
+
+CMD ["node", "server.js"]

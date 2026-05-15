@@ -1,0 +1,25 @@
+{
+  "name": "bankrsynth",
+  "version": "2.0.0",
+  "description": "BankrSynth — AI-native autonomous development terminal & synth operating system",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "dev:frontend": "turbo run dev --filter=@bankrsynth/frontend",
+    "dev:backend": "turbo run dev --filter=@bankrsynth/backend",
+    "build:packages": "turbo run build --filter=./packages/*",
+    "synth": "node scripts/synth-cli.js"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

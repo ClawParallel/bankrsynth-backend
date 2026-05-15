@@ -1,0 +1,28 @@
+{
+  "name": "@bankrsynth/agents",
+  "version": "1.0.0",
+  "description": "BankrSynth AI agent orchestration — multi-agent swarm runtime",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs --dts",
+    "dev": "tsup src/index.ts --format cjs --dts --watch",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@bankrsynth/shared": "workspace:*",
+    "@bankrsynth/terminal": "workspace:*",
+    "axios": "^1.13.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
