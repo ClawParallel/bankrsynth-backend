@@ -89,25 +89,45 @@ return res.data;
 };
 
 /////////////////////////////////////////////////
-// HEALTH CHECK
+// HEALTH + READINESS
 /////////////////////////////////////////////////
+
+const startTime = Date.now();
 
 app.get("/", (req, res) => {
 res.json({
   name: "BankrSynth",
   status: "LIVE",
   version: "2.0.0",
+  uptime: Math.floor((Date.now() - startTime) / 1000),
   features: ["token-launch", "gitlawb", "coding-agent", "terminal-stream"],
   endpoints: {
-    health: "GET /",
+    health: "GET /health",
+    ready: "GET /ready",
     launch: "POST /launch",
     agent: "POST /agent",
     skill: "POST /execute-skill",
     gitlawb: "GET /gitlawb/*",
     synth: "POST /synth/exec",
     terminal: "GET /terminal/stream (SSE)",
+    websocket: "WS /socket.io/",
+    narratives: "GET /narratives",
   },
 });
+});
+
+// Liveness probe — process is alive
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    ts: new Date().toISOString(),
+  });
+});
+
+// Readiness probe — ready to accept traffic
+app.get("/ready", (req, res) => {
+  res.json({ status: "ready", ts: new Date().toISOString() });
 });
 
 /////////////////////////////////////////////////
@@ -318,9 +338,38 @@ logger.ok("GitLawb integration loaded");
 logger.ok("Socket.IO realtime layer active");
 logger.ok("Synth terminal routes active");
 logger.info(`REST API:        http://localhost:${PORT}/`);
+logger.info(`Health:          GET http://localhost:${PORT}/health`);
 logger.info(`Terminal SSE:    GET http://localhost:${PORT}/terminal/stream`);
 logger.info(`WebSocket:       ws://localhost:${PORT}/`);
 logger.info(`GitLawb API:     POST http://localhost:${PORT}/gitlawb/*`);
 logger.info(`Synth commands:  POST http://localhost:${PORT}/synth/exec`);
 logger.info(`Narratives:      GET http://localhost:${PORT}/narratives`);
+});
+
+/////////////////////////////////////////////////
+// GRACEFUL SHUTDOWN
+/////////////////////////////////////////////////
+
+function gracefulShutdown(signal) {
+  logger.warn(`${signal} received — shutting down gracefully`);
+  server.close(() => {
+    logger.ok("HTTP server closed");
+    process.exit(0);
+  });
+  // Force exit if connections don't drain within 10s
+  setTimeout(() => {
+    logger.error("Forced shutdown after timeout");
+    process.exit(1);
+  }, 10000);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
+
+process.on("unhandledRejection", (reason) => {
+  logger.error(`Unhandled rejection: ${reason}`);
+});
+process.on("uncaughtException", (err) => {
+  logger.error(`Uncaught exception: ${err.message}`);
+  gracefulShutdown("uncaughtException");
 });

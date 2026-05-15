@@ -1,0 +1,35 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "buildCommand": "cd ../.. && pnpm run --filter @bankrsynth/shared build && pnpm run --filter @bankrsynth/synth-sdk build && pnpm run --filter @bankrsynth/frontend build",
+  "outputDirectory": "apps/frontend/.next",
+  "devCommand": "cd ../.. && pnpm run --filter @bankrsynth/frontend dev",
+
+  "headers": [
+    {
+      "source": "/terminal/stream",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache" },
+        { "key": "X-Accel-Buffering", "value": "no" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-XSS-Protection", "value": "1; mode=block" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ],
+
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://api.bankrsynth.com/:path*"
+    }
+  ]
+}
