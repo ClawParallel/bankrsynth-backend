@@ -289,3 +289,118 @@ html, body {
   .mobile-stack { flex-direction: column !important; }
   .mobile-full { width: 100% !important; max-width: 100% !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   SYNTH TERMINAL STYLES
+═══════════════════════════════════════════════════════════════ */
+
+.synth-terminal-wrap {
+  background: rgba(0, 3, 1, 0.97);
+  border: 1px solid rgba(0,255,65,0.15);
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+
+.synth-terminal-wrap .terminal-log-line {
+  transition: background 0.1s;
+}
+.synth-terminal-wrap .terminal-log-line:hover {
+  background: rgba(0,255,65,0.03);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE FIXES — Critical responsive overrides
+═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .nav-bar { padding: 0 10px; height: 52px; }
+  .page-wrapper { padding-top: 52px; }
+
+  /* Prevent horizontal scroll */
+  .glass-panel { clip-path: none !important; border-radius: 2px; }
+  .mode-btn, .neon-btn { clip-path: none !important; border-radius: 2px; }
+
+  /* Smaller font on mobile */
+  .panel-title { font-size: 8px; }
+  .metric-label { font-size: 9px; }
+  .metric-val { font-size: 11px; }
+  .prog-label { font-size: 8px; }
+
+  /* Full-width inputs and buttons on mobile */
+  .terminal-input { font-size: 14px; } /* prevent iOS zoom */
+
+  /* Mobile synth terminal */
+  .synth-terminal-wrap { border-left: none; border-right: none; }
+
+  /* Responsive grid collapse */
+  [style*="grid-template-columns: repeat(auto-fill"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .hide-mobile { display: none !important; }
+  .mobile-stack { flex-direction: column !important; }
+  .mobile-full { width: 100% !important; max-width: 100% !important; }
+  .nav-bar { padding: 0 12px; }
+
+  /* Prevent panels from overflowing */
+  .glass-panel { overflow-wrap: break-word; word-break: break-word; }
+
+  /* Synth page — stack vertically on tablet */
+  .synth-page-grid {
+    flex-direction: column !important;
+  }
+
+  /* Swarm grid — 2 columns on tablet */
+  .swarm-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FRAMER MOTION ANIMATIONS
+═══════════════════════════════════════════════════════════════ */
+
+@keyframes progressPulse {
+  from { opacity: 0.6; }
+  to   { opacity: 1; }
+}
+
+@keyframes agentPulse {
+  0%   { box-shadow: 0 0 4px currentColor; }
+  50%  { box-shadow: 0 0 16px currentColor, 0 0 32px currentColor; }
+  100% { box-shadow: 0 0 4px currentColor; }
+}
+
+@keyframes scanLine {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  10%  { opacity: 0.6; }
+  90%  { opacity: 0.6; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+/* Holographic shimmer for active agents */
+.agent-active-glow {
+  animation: agentPulse 2s ease-in-out infinite;
+}
+
+/* Status dot variants */
+.status-dot-off {
+  background: rgba(255,100,100,0.6) !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+/* Subtle grid/repos hover */
+.glass-panel:hover .corner-tl,
+.glass-panel:hover .corner-br {
+  border-color: var(--green);
+}
+
+/* Mobile touch targets */
+@media (max-width: 640px) {
+  button { min-height: 36px; }
+  .mode-btn { padding: 8px 10px !important; font-size: 10px !important; }
+  .neon-btn { font-size: 11px !important; padding: 10px 16px !important; }
+}

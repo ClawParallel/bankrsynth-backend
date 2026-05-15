@@ -22,6 +22,7 @@ const gitlawbRoutes = require("./routes/gitlawb");
 const terminalRoutes = require("./routes/terminal");
 const synthRoutes = require("./routes/synth");
 const narrativesRoutes = require("./routes/narratives");
+const { router: swarmRouter } = require("./routes/swarm");
 const { initSocketServer } = require("./routes/websocket");
 
 const app = express();
@@ -43,6 +44,7 @@ app.use("/gitlawb", gitlawbRoutes);
 app.use("/terminal", terminalRoutes);
 app.use("/synth", synthRoutes);
 app.use("/narratives", narrativesRoutes);
+app.use("/swarm", swarmRouter);
 
 /////////////////////////////////////////////////
 // 🧠 VALIDATORS
