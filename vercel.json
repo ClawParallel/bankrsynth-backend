@@ -4,7 +4,7 @@
 
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
   "buildCommand": "cd ../.. && pnpm run --filter @bankrsynth/shared build && pnpm run --filter @bankrsynth/synth-sdk build && pnpm run --filter @bankrsynth/frontend build",
-  "outputDirectory": "apps/frontend/.next",
+  "outputDirectory": ".next",
   "devCommand": "cd ../.. && pnpm run --filter @bankrsynth/frontend dev",
 
   "headers": [
