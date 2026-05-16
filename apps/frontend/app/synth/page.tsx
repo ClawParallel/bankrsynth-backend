@@ -9,7 +9,7 @@ export default function SynthPage() {
   const [showRef, setShowRef] = useState(false);
 
   return (
-    <main style={{ height: "100vh", paddingTop: "56px", display: "flex", flexDirection: "column", background: "#000" }}>
+    <main style={{ height: "100dvh", paddingTop: "clamp(52px,8vw,56px)", display: "flex", flexDirection: "column", background: "#000" }}>
       {/* Header */}
       <div style={{ padding: "10px 20px 8px", borderBottom: "1px solid rgba(0,255,65,0.12)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
         <div>

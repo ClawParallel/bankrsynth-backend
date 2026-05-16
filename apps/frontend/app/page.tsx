@@ -27,7 +27,7 @@ export default function Home() {
       </div>
 
       <div style={{ position: 'relative', zIndex: 10, pointerEvents: 'none', padding: '12px 16px' }}>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', pointerEvents: 'all', marginBottom: '12px' }}>
+        <div className="hide-mobile" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', pointerEvents: 'all', marginBottom: '12px' }}>
           {MODES.map(m => (
             <button
               key={m.key}
@@ -94,9 +94,9 @@ export default function Home() {
         </div>
       </div>
 
-      <div style={{ position: 'fixed', bottom: '16px', left: '50%', transform: 'translateX(-50%)', width: 'min(700px, 90vw)', zIndex: 10 }}>
+      <div className="home-stats-bar" style={{ position: 'fixed', bottom: '16px', left: '50%', transform: 'translateX(-50%)', width: 'min(700px, 90vw)', zIndex: 10 }}>
         <div className="glass-panel">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
+          <div className="home-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
             {[
               { num: '$2.91T', label: 'TOTAL MKT CAP', color: 'var(--green)' },
               { num: '$847B', label: '24H VOLUME', color: 'var(--red)' },
@@ -112,16 +112,40 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="sm:hidden" style={{ padding: '16px', zIndex: 10, position: 'relative' }}>
-        <div className="glass-panel" style={{ marginBottom: '12px' }}>
-          <div className="panel-title">SYSTEM STATUS</div>
-          <div className="metric-row"><span className="metric-label">BASE NETWORK</span><span className="metric-val">ONLINE</span></div>
-          <div className="metric-row"><span className="metric-label">AGENT</span><span className="metric-val cyan">ACTIVE</span></div>
-          <div className="metric-row"><span className="metric-label">TPS</span><span className="metric-val">4,193</span></div>
+      <div className="sm:hidden" style={{ padding: '12px', paddingBottom: '100px', zIndex: 10, position: 'relative' }}>
+        {/* Mobile mode switcher */}
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+          {MODES.map(m => (
+            <button
+              key={m.key}
+              className={`mode-btn ${mode === m.key ? 'active' : ''}`}
+              onClick={() => setMode(m.key)}
+              style={{ fontSize: '9px', padding: '8px 10px', minHeight: 'unset', flex: '1', minWidth: '60px' }}
+            >
+              {m.icon} {m.label}
+            </button>
+          ))}
         </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+          <div className="glass-panel">
+            <div className="panel-title" style={{ marginBottom: '6px' }}>STATUS</div>
+            <div className="metric-row"><span className="metric-label">NETWORK</span><span className="metric-val" style={{ fontSize: '11px' }}>ONLINE</span></div>
+            <div className="metric-row"><span className="metric-label">AGENT</span><span className="metric-val cyan" style={{ fontSize: '11px' }}>ACTIVE</span></div>
+            <div className="metric-row"><span className="metric-label">TPS</span><span className="metric-val" style={{ fontSize: '11px' }}>4,193</span></div>
+          </div>
+          <div className="glass-panel red-panel">
+            <div className="corner corner-tl" style={{ borderColor: 'rgba(255,26,60,0.4)' }} />
+            <div className="panel-title red" style={{ marginBottom: '6px' }}>cmETH</div>
+            <div className="metric-row"><span className="metric-label">PRICE</span><span className="metric-val red" style={{ fontSize: '11px' }}>$2,847</span></div>
+            <div className="metric-row"><span className="metric-label">24H</span><span className="metric-val" style={{ fontSize: '11px' }}>+4.7%</span></div>
+            <div className="metric-row"><span className="metric-label">ENERGY</span><span className="metric-val red" style={{ fontSize: '11px' }}>91 THz</span></div>
+          </div>
+        </div>
+
         <div className="glass-panel">
           <div className="panel-title">SYS LOG</div>
-          <TerminalLog maxLines={5} />
+          <TerminalLog maxLines={6} />
         </div>
       </div>
     </div>

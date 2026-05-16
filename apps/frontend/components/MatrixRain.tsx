@@ -13,10 +13,14 @@ export default function MatrixRain() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%^&*ΩΨΦΞΛΘΣΔαβγ₿◆◇▲▶●○□■'
     let W: number, H: number, cols: number, drops: number[]
 
+    const isMobile = window.innerWidth < 768
+    const colWidth = isMobile ? 20 : 14
+    const tickMs = isMobile ? 70 : 45
+
     const resize = () => {
       W = canvas.width = window.innerWidth
       H = canvas.height = window.innerHeight
-      cols = Math.floor(W / 14)
+      cols = Math.floor(W / colWidth)
       drops = Array(cols).fill(1)
     }
     resize()
@@ -29,11 +33,11 @@ export default function MatrixRain() {
         const ch = chars[Math.floor(Math.random() * chars.length)]
         ctx.fillStyle = Math.random() > 0.9 ? '#00ff41' : '#007a1f'
         ctx.font = `${12 + Math.random() * 2}px 'Share Tech Mono', monospace`
-        ctx.fillText(ch, i * 14, drops[i] * 14)
-        if (drops[i] * 14 > H && Math.random() > 0.975) drops[i] = 0
+        ctx.fillText(ch, i * colWidth, drops[i] * colWidth)
+        if (drops[i] * colWidth > H && Math.random() > 0.975) drops[i] = 0
         drops[i]++
       }
-    }, 45)
+    }, tickMs)
 
     return () => {
       clearInterval(interval)
