@@ -20,6 +20,11 @@
   --font-mono: 'Share Tech Mono', monospace;
   --font-display: 'Orbitron', sans-serif;
   --font-terminal: 'VT323', monospace;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --touch-target: 44px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -283,12 +288,187 @@ html, body {
 .max-w-6xl { max-width: 72rem; }
 .max-w-7xl { max-width: 80rem; }
 
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE-FIRST RESPONSIVE SYSTEM
+═══════════════════════════════════════════════════════════════ */
+
+/* Safe area support for notched phones */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .nav-bar { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+  .page-wrapper { padding-bottom: env(safe-area-inset-bottom); }
+  .mobile-drawer { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
+
 @media (max-width: 768px) {
   .nav-bar { padding: 0 12px; }
   .hide-mobile { display: none !important; }
   .mobile-stack { flex-direction: column !important; }
   .mobile-full { width: 100% !important; max-width: 100% !important; }
+  .glass-panel { overflow-wrap: break-word; word-break: break-word; }
+  /* Touch targets — page-level buttons only, not nav buttons */
+  .neon-btn { min-height: var(--touch-target); }
+  .wallet-btn { min-height: var(--touch-target); }
+  /* Reduce matrix rain opacity on mobile for readability */
+  .matrix-canvas { opacity: 0.09 !important; }
 }
+
+@media (max-width: 640px) {
+  .nav-bar { padding: 0 10px; height: 52px; }
+  .page-wrapper { padding-top: 52px; }
+
+  /* Disable clip-path on mobile — causes overflow issues */
+  .glass-panel { clip-path: none !important; border-radius: 3px; }
+  .mode-btn, .neon-btn, .wallet-btn { clip-path: none !important; border-radius: 3px; }
+
+  /* Fluid typography */
+  .panel-title { font-size: clamp(7px, 2vw, 9px); letter-spacing: 0.2em; }
+  .metric-label { font-size: clamp(8px, 2.5vw, 10px); }
+  .metric-val { font-size: clamp(11px, 3.5vw, 14px); }
+  .prog-label { font-size: clamp(7px, 2vw, 9px); }
+
+  /* iOS zoom prevention — must be 16px+ */
+  .terminal-input { font-size: 16px !important; padding: 10px 6px; }
+  input, select, textarea { font-size: 16px !important; }
+
+  /* Synth terminal — edge-to-edge on mobile */
+  .synth-terminal-wrap { border-left: none; border-right: none; border-radius: 0; }
+
+  /* Force single column for auto-fill grids */
+  [style*="minmax(280px"] { grid-template-columns: 1fr !important; }
+  [style*="minmax(260px"] { grid-template-columns: 1fr !important; }
+
+  /* Compact buttons */
+  .neon-btn { font-size: 11px; padding: 10px 16px; letter-spacing: 0.15em; }
+  .mode-btn { font-size: 9px; padding: 8px 10px; letter-spacing: 0.1em; }
+
+  /* Stats bar — 2x2 grid on mobile */
+  .home-stats-bar { width: calc(100% - 24px) !important; left: 12px !important; transform: none !important; }
+  .home-stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+
+  /* Agent/terminal pages — reduce top padding for shorter mobile header */
+  .page-wrapper[style*="padding: '64px"] { padding-top: 60px !important; }
+
+  /* Reduce glass panel padding on mobile */
+  .glass-panel { padding: 10px; }
+
+  /* Log lines — slightly larger on mobile for readability */
+  .log-line { font-size: 10px; }
+
+  /* Synth page terminal — full height available */
+  .synth-page-terminal { min-height: calc(100dvh - 140px) !important; }
+
+  /* Reduce scanlines intensity on mobile */
+  .scanlines { opacity: 0.5 !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE HOLOGRAPHIC DRAWER
+═══════════════════════════════════════════════════════════════ */
+
+.mobile-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.mobile-drawer-backdrop.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.mobile-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 95;
+  width: min(320px, 85vw);
+  background: rgba(0, 2, 0, 0.98);
+  border-left: 1px solid rgba(0, 255, 65, 0.2);
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.mobile-drawer.open {
+  transform: translateX(0);
+  box-shadow: -8px 0 40px rgba(0, 255, 65, 0.08);
+}
+
+.mobile-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid rgba(0, 255, 65, 0.12);
+  flex-shrink: 0;
+}
+
+.mobile-drawer-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(0, 255, 65, 0.06);
+  text-decoration: none;
+  min-height: 56px;
+  position: relative;
+  transition: background 0.15s;
+}
+.mobile-drawer-nav-item:hover,
+.mobile-drawer-nav-item:active {
+  background: rgba(0, 255, 65, 0.04);
+}
+.mobile-drawer-nav-item.active {
+  background: rgba(0, 255, 65, 0.06);
+  border-left: 2px solid var(--green);
+}
+.mobile-drawer-nav-item.active .drawer-label {
+  color: var(--green);
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.4);
+}
+
+.drawer-glyph {
+  font-size: 20px;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.drawer-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: rgba(0, 255, 65, 0.55);
+  text-transform: uppercase;
+}
+
+.mobile-drawer-footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(0, 255, 65, 0.1);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: rgba(0, 255, 65, 0.3);
+  letter-spacing: 0.12em;
+  margin-top: auto;
+}
+
+/* Hamburger animation */
+.hamburger-bar {
+  display: block;
+  height: 2px;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  transition: all 0.25s ease;
+  transform-origin: center;
+}
+.hamburger-open .hamburger-bar:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.hamburger-open .hamburger-bar:nth-child(2) { opacity: 0; transform: scaleX(0); }
+.hamburger-open .hamburger-bar:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
 
 /* ═══════════════════════════════════════════════════════════════
    SYNTH TERMINAL STYLES
@@ -306,56 +486,6 @@ html, body {
 }
 .synth-terminal-wrap .terminal-log-line:hover {
   background: rgba(0,255,65,0.03);
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   MOBILE FIXES — Critical responsive overrides
-═══════════════════════════════════════════════════════════════ */
-
-@media (max-width: 640px) {
-  .nav-bar { padding: 0 10px; height: 52px; }
-  .page-wrapper { padding-top: 52px; }
-
-  /* Prevent horizontal scroll */
-  .glass-panel { clip-path: none !important; border-radius: 2px; }
-  .mode-btn, .neon-btn { clip-path: none !important; border-radius: 2px; }
-
-  /* Smaller font on mobile */
-  .panel-title { font-size: 8px; }
-  .metric-label { font-size: 9px; }
-  .metric-val { font-size: 11px; }
-  .prog-label { font-size: 8px; }
-
-  /* Full-width inputs and buttons on mobile */
-  .terminal-input { font-size: 14px; } /* prevent iOS zoom */
-
-  /* Mobile synth terminal */
-  .synth-terminal-wrap { border-left: none; border-right: none; }
-
-  /* Responsive grid collapse */
-  [style*="grid-template-columns: repeat(auto-fill"] {
-    grid-template-columns: 1fr !important;
-  }
-}
-
-@media (max-width: 768px) {
-  .hide-mobile { display: none !important; }
-  .mobile-stack { flex-direction: column !important; }
-  .mobile-full { width: 100% !important; max-width: 100% !important; }
-  .nav-bar { padding: 0 12px; }
-
-  /* Prevent panels from overflowing */
-  .glass-panel { overflow-wrap: break-word; word-break: break-word; }
-
-  /* Synth page — stack vertically on tablet */
-  .synth-page-grid {
-    flex-direction: column !important;
-  }
-
-  /* Swarm grid — 2 columns on tablet */
-  .swarm-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -398,9 +528,4 @@ html, body {
   border-color: var(--green);
 }
 
-/* Mobile touch targets */
-@media (max-width: 640px) {
-  button { min-height: 36px; }
-  .mode-btn { padding: 8px 10px !important; font-size: 10px !important; }
-  .neon-btn { font-size: 11px !important; padding: 10px 16px !important; }
-}
+/* Mobile touch targets handled in MOBILE-FIRST RESPONSIVE SYSTEM above */

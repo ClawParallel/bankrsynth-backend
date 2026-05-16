@@ -26,8 +26,13 @@ export default function Nav() {
     return () => { clearInterval(t); clearInterval(b) }
   }, [])
 
-  // Close menu on route change
   useEffect(() => { setMenuOpen(false) }, [path])
+
+  // Lock body scroll when drawer open
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [menuOpen])
 
   return (
     <>
@@ -47,7 +52,7 @@ export default function Nav() {
           {modules.map(({ href, label, icon }) => (
             <Link key={href} href={href} className="no-underline">
               <button className={`mode-btn ${path === href ? 'active' : ''}`}
-                style={{ fontSize: '9px', padding: '4px 8px', letterSpacing: '0.1em' }}>
+                style={{ fontSize: '9px', padding: '4px 8px', letterSpacing: '0.1em', minHeight: 'unset' }}>
                 {icon} {label}
               </button>
             </Link>
@@ -69,41 +74,66 @@ export default function Nav() {
           <WalletButton />
 
           {/* Mobile hamburger */}
-          <button className="sm:hidden flex flex-col p-1" onClick={() => setMenuOpen(o => !o)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', gap: '4px' }}>
-            {[0,1,2].map(i => (
-              <span key={i} style={{ display: 'block', width: i === 1 ? '14px' : '18px', height: '2px', background: 'var(--green)', boxShadow: '0 0 6px var(--green)', transition: 'all 0.2s' }} />
-            ))}
+          <button
+            className={`sm:hidden flex flex-col ${menuOpen ? 'hamburger-open' : ''}`}
+            onClick={() => setMenuOpen(o => !o)}
+            aria-label="Toggle menu"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', gap: '4px', padding: '8px', minHeight: '44px', alignItems: 'center', justifyContent: 'center' }}>
+            <span className="hamburger-bar" style={{ width: '18px' }} />
+            <span className="hamburger-bar" style={{ width: '14px' }} />
+            <span className="hamburger-bar" style={{ width: '18px' }} />
           </button>
         </div>
       </nav>
 
-      {/* Mobile dropdown */}
-      {menuOpen && (
-        <div className="fixed sm:hidden" style={{ top: '56px', left: 0, right: 0, zIndex: 50, background: 'rgba(0,0,0,0.97)', borderBottom: '1px solid rgba(0,255,65,0.15)', backdropFilter: 'blur(12px)', maxHeight: 'calc(100vh - 56px)', overflowY: 'auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid rgba(0,255,65,0.08)' }}>
-            {modules.map(({ href, label, icon }) => (
-              <Link key={href} href={href} onClick={() => setMenuOpen(false)} className="no-underline">
-                <div style={{
-                  padding: '16px 16px',
-                  fontSize: '11px', letterSpacing: '0.15em',
-                  fontFamily: 'var(--font-mono)',
-                  color: path === href ? 'var(--green)' : 'rgba(0,255,65,0.45)',
-                  borderLeft: path === href ? '2px solid var(--green)' : '2px solid transparent',
-                  borderBottom: '1px solid rgba(0,255,65,0.06)',
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                }}>
-                  <span style={{ fontSize: '14px' }}>{icon}</span>
-                  <span>{label}</span>
-                </div>
-              </Link>
-            ))}
+      {/* Backdrop */}
+      <div
+        className={`mobile-drawer-backdrop sm:hidden ${menuOpen ? 'open' : ''}`}
+        onClick={() => setMenuOpen(false)}
+      />
+
+      {/* Holographic slide-out drawer */}
+      <div className={`mobile-drawer sm:hidden ${menuOpen ? 'open' : ''}`} role="navigation">
+        {/* Drawer header */}
+        <div className="mobile-drawer-header">
+          <div>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '14px', letterSpacing: '0.2em' }}>
+              <span style={{ color: 'var(--green)', textShadow: '0 0 20px var(--green)' }}>BANKR</span>
+              <span style={{ color: 'var(--red)', textShadow: '0 0 20px var(--red)' }}>SYNTH</span>
+            </div>
+            <div style={{ fontSize: '8px', color: 'rgba(0,255,65,0.3)', letterSpacing: '0.15em', marginTop: '3px' }}>
+              ◉ {clock} │ BLK #{blockNum.toLocaleString()}
+            </div>
           </div>
-          <div style={{ padding: '10px 16px', fontSize: '9px', color: 'rgba(0,255,65,0.35)', fontFamily: 'var(--font-mono)', letterSpacing: '0.12em' }}>
-            ◉ {clock} │ BLK #{blockNum.toLocaleString()}
-          </div>
+          <button
+            onClick={() => setMenuOpen(false)}
+            style={{ background: 'none', border: '1px solid rgba(0,255,65,0.2)', color: 'rgba(0,255,65,0.6)', cursor: 'pointer', padding: '6px 10px', fontSize: '12px', borderRadius: '2px', minHeight: '36px' }}>
+            ✕
+          </button>
         </div>
-      )}
+
+        {/* Nav items */}
+        <div style={{ flex: 1 }}>
+          {modules.map(({ href, label, icon }) => (
+            <Link key={href} href={href} onClick={() => setMenuOpen(false)} className={`mobile-drawer-nav-item ${path === href ? 'active' : ''}`}>
+              <span className="drawer-glyph" style={{ color: path === href ? 'var(--green)' : 'rgba(0,255,65,0.4)' }}>{icon}</span>
+              <span className="drawer-label">{label}</span>
+              {path === href && (
+                <span style={{ marginLeft: 'auto', fontSize: '8px', color: 'var(--green)', letterSpacing: '0.15em' }}>● ACTIVE</span>
+              )}
+            </Link>
+          ))}
+        </div>
+
+        {/* Drawer footer */}
+        <div className="mobile-drawer-footer">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+            <div className="status-dot" style={{ width: '6px', height: '6px' }} />
+            <span>NODE: 0xF4a9 — BASE MAINNET</span>
+          </div>
+          <div style={{ color: 'rgba(0,255,65,0.2)' }}>AI-NATIVE AUTONOMOUS TERMINAL</div>
+        </div>
+      </div>
     </>
   )
 }
