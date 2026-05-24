@@ -1,270 +1,250 @@
-"use client";
-import { useEffect, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-
-const API = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
+'use client'
+import { useState, useEffect } from 'react'
 
 interface Agent {
-  id: string;
-  name: string;
-  type: string;
-  glyph: string;
-  description: string;
-  status: "idle" | "active" | "error";
-  task: string | null;
-  startedAt: number | null;
-  executions: number;
-  uptime: number;
+  id: number
+  name: string
+  status: 'ACTIVE' | 'STANDBY'
+  role: string
 }
 
-interface LogEntry {
-  ts: number;
-  agentId: string;
-  agentName: string;
-  glyph: string;
-  action: string;
-  task?: string;
+interface Task {
+  id: string
+  text: string
+  ts: number
+  status: 'queued' | 'triggered' | 'error'
+  message?: string
 }
 
-interface SwarmStatus {
-  agents: Agent[];
-  activeCount: number;
-  idleCount: number;
-  totalExecutions: number;
-  log: LogEntry[];
+const AGENTS: Agent[] = [
+  { id: 1,  name: 'Scan Agent',      status: 'ACTIVE',   role: 'trending_base monitoring · GeckoTerminal' },
+  { id: 2,  name: 'Narrative Agent', status: 'ACTIVE',   role: 'narrative_scan · meta detection · Aeon' },
+  { id: 3,  name: 'Thesis Agent',    status: 'ACTIVE',   role: 'alpha_generation · long/short picks' },
+  { id: 4,  name: 'Sentiment Agent', status: 'ACTIVE',   role: 'LunarCrush v4 · Galaxy Score · social feed' },
+  { id: 5,  name: 'Swap Agent',      status: 'STANDBY',  role: 'awaiting signal · handoff to BankrBot' },
+  { id: 6,  name: 'Monitor Agent',   status: 'ACTIVE',   role: 'on_chain_watch · whale detection · Base' },
+  { id: 7,  name: 'Analysis Agent',  status: 'ACTIVE',   role: 'vol/mcap ratio · liquidity depth · on-chain' },
+  { id: 8,  name: 'Social Agent',    status: 'ACTIVE',   role: 'X/Twitter · Reddit · Polymarket signals' },
+  { id: 9,  name: 'Repos Agent',     status: 'ACTIVE',   role: 'gitlawb health · push notifications' },
+  { id: 10, name: 'Intel Agent',     status: 'ACTIVE',   role: 'macro: BTC dominance · fear/greed · regime' },
+  { id: 11, name: 'Alert Agent',     status: 'ACTIVE',   role: 'threshold alerts · cross-chain signals' },
+  { id: 12, name: 'Swarm Agent',     status: 'ACTIVE',   role: 'orchestration · inter-agent coordination' },
+]
+
+const TASK_SKILLS: Record<string, string> = {
+  'narrative': 'narrative-tracker',
+  'alert': 'token-alert',
+  'monitor': 'on-chain-monitor',
+  'defi': 'defi-monitor',
+  'report': 'token-report',
+  'market': 'market-context-refresh',
+  'brief': 'morning-brief',
+  'wallet': 'wallet-digest',
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  coding:  "var(--green)",
-  deploy:  "var(--gold)",
-  monitor: "var(--cyan)",
-  review:  "#cc88ff",
-  intel:   "var(--cyan)",
-};
-
-function elapsed(startedAt: number | null) {
-  if (!startedAt) return "—";
-  const s = Math.floor((Date.now() - startedAt) / 1000);
-  if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${s % 60}s`;
+function detectSkill(text: string): string | null {
+  const lower = text.toLowerCase()
+  for (const [key, skill] of Object.entries(TASK_SKILLS)) {
+    if (lower.includes(key)) return skill
+  }
+  return null
 }
 
-function fmtTime(ts: number) {
-  return new Date(ts).toLocaleTimeString("en-US", { hour12: false });
-}
+const MIROSHARK_CONFIGURED = typeof process !== 'undefined' && !!process.env.NEXT_PUBLIC_MIROSHARK_URL
 
 export default function SwarmPage() {
-  const [swarm, setSwarm] = useState<SwarmStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [launching, setLaunching] = useState<string | null>(null);
-  const [taskInput, setTaskInput] = useState<Record<string, string>>({});
-  const [elapsed_, setElapsed] = useState(0);
-
-  const fetchSwarm = useCallback(async () => {
-    try {
-      const r = await fetch(`${API}/swarm/status`, { signal: AbortSignal.timeout(6000) });
-      if (r.ok) setSwarm(await r.json());
-    } catch { /* backend offline */ }
-    setLoading(false);
-  }, []);
+  const [taskInput, setTaskInput] = useState('')
+  const [deploying, setDeploying] = useState(false)
+  const [tasks, setTasks] = useState<Task[]>([])
 
   useEffect(() => {
-    fetchSwarm();
-    const interval = setInterval(fetchSwarm, 5000);
-    // Force re-render every second for elapsed timers
-    const tick = setInterval(() => setElapsed((n) => n + 1), 1000);
-    return () => { clearInterval(interval); clearInterval(tick); };
-  }, [fetchSwarm]);
-
-  // Listen for WebSocket swarm updates
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.agents) setSwarm((prev) => prev ? { ...prev, ...detail } : detail);
-    };
-    window.addEventListener("synth:swarm:update", handler);
-    return () => window.removeEventListener("synth:swarm:update", handler);
-  }, []);
-
-  const launchAgent = async (agentId: string) => {
-    setLaunching(agentId);
     try {
-      const task = taskInput[agentId] || `Task from ${new Date().toLocaleTimeString()}`;
-      const r = await fetch(`${API}/swarm/launch/${agentId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task }),
-        signal: AbortSignal.timeout(8000),
-      });
-      if (r.ok) {
-        setTaskInput((prev) => ({ ...prev, [agentId]: "" }));
-        await fetchSwarm();
+      const saved = localStorage.getItem('bsynth_tasks')
+      if (saved) setTasks(JSON.parse(saved) as Task[])
+    } catch {
+      // ignore localStorage errors
+    }
+  }, [])
+
+  function persistTasks(t: Task[]) {
+    setTasks(t)
+    try { localStorage.setItem('bsynth_tasks', JSON.stringify(t.slice(0, 20))) } catch { /* ignore */ }
+  }
+
+  async function deployTask() {
+    if (!taskInput.trim() || deploying) return
+    setDeploying(true)
+
+    const skill = detectSkill(taskInput)
+    const newTask: Task = {
+      id: Date.now().toString(),
+      text: taskInput.trim(),
+      ts: Date.now(),
+      status: 'queued',
+    }
+    persistTasks([newTask, ...tasks])
+    setTaskInput('')
+
+    if (skill) {
+      try {
+        const r = await fetch('/api/aeon', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skill, payload: { task: taskInput.trim() } }),
+        })
+        const d = (await r.json()) as { status?: string; message?: string }
+        persistTasks([{ ...newTask, status: d.status === 'triggered' ? 'triggered' : 'error', message: d.message }, ...tasks])
+      } catch {
+        persistTasks([{ ...newTask, status: 'error', message: 'network error' }, ...tasks])
       }
-    } catch { /* noop */ }
-    setLaunching(null);
-  };
+    } else {
+      persistTasks([{ ...newTask, status: 'triggered', message: 'Connecting to swarm... task queued' }, ...tasks])
+    }
 
-  const stopAgent = async (agentId: string) => {
-    try {
-      await fetch(`${API}/swarm/stop/${agentId}`, { method: "POST", signal: AbortSignal.timeout(4000) });
-      await fetchSwarm();
-    } catch { /* noop */ }
-  };
+    setDeploying(false)
+  }
 
-  const agents = swarm?.agents ?? [];
-  const activeCount = agents.filter((a) => a.status === "active").length;
-
-  // Demo agents when backend offline
-  const demoAgents: Agent[] = [
-    { id: "coding-agent",  name: "Coding Agent",  type: "coding",  glyph: "⬢", description: "Autonomous code generation",         status: "idle",   task: null, startedAt: null, executions: 0, uptime: Date.now() },
-    { id: "deploy-agent",  name: "Deploy Agent",  type: "deploy",  glyph: "⚡", description: "Token and contract deployment",      status: "idle",   task: null, startedAt: null, executions: 0, uptime: Date.now() },
-    { id: "monitor-agent", name: "Monitor Agent", type: "monitor", glyph: "◈", description: "Continuous chain monitoring",        status: "active", task: "Watching Base chain events", startedAt: Date.now() - 120000, executions: 47, uptime: Date.now() - 3600000 },
-    { id: "review-agent",  name: "Review Agent",  type: "review",  glyph: "◉", description: "AI code review and diff analysis",  status: "idle",   task: null, startedAt: null, executions: 12, uptime: Date.now() - 7200000 },
-    { id: "intel-agent",   name: "Intel Agent",   type: "intel",   glyph: "⬟", description: "Crypto narrative intelligence",     status: "active", task: "Scanning Base narratives", startedAt: Date.now() - 60000, executions: 234, uptime: Date.now() - 86400000 },
-  ];
-  const displayAgents = agents.length > 0 ? agents : demoAgents;
+  const activeCount = AGENTS.filter((a) => a.status === 'ACTIVE').length
 
   return (
-    <main className="page-wrapper" style={{ padding: "64px 16px 48px" }}>
-      <div style={{ maxWidth: "960px", margin: "0 auto" }}>
-
-        {/* Header */}
-        <div style={{ marginBottom: "20px" }}>
-          <p style={{ fontSize: "9px", letterSpacing: "0.3em", color: "rgba(0,255,65,0.35)" }}>BANKRSYNTH://</p>
-          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "clamp(16px,3vw,22px)", fontWeight: 700, letterSpacing: "0.2em", color: "var(--green)", textShadow: "0 0 20px rgba(0,255,65,0.4)", marginTop: "4px" }}>
+    <main className="page-wrapper" style={{ padding: '64px 16px 48px' }}>
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+        <div style={{ marginBottom: '20px' }}>
+          <p style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'rgba(0,255,65,0.35)' }}>BANKRSYNTH://</p>
+          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(16px,3vw,22px)', fontWeight: 700, letterSpacing: '0.2em', color: 'var(--green)', textShadow: '0 0 20px rgba(0,255,65,0.4)', marginTop: '4px' }}>
             ⬢ AI SWARM — AUTONOMOUS AGENT ORCHESTRATION
           </h1>
         </div>
 
         {/* Telemetry bar */}
-        <div className="glass-panel" style={{ marginBottom: "16px", display: "flex", flexWrap: "wrap", gap: "20px 32px" }}>
+        <div className="glass-panel" style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '20px 32px' }}>
           <div className="corner corner-tl" />
           {[
-            { label: "ACTIVE AGENTS",     value: `${activeCount}/${displayAgents.length}`,  color: activeCount > 0 ? "var(--green)" : "rgba(0,255,65,0.4)" },
-            { label: "IDLE",              value: displayAgents.filter((a) => a.status === "idle").length, color: "rgba(0,255,65,0.6)" },
-            { label: "TOTAL EXECUTIONS",  value: swarm?.totalExecutions ?? displayAgents.reduce((n, a) => n + a.executions, 0), color: "var(--cyan)" },
-            { label: "SWARM STATUS",      value: loading ? "CONNECTING" : agents.length ? "LIVE" : "DEMO",  color: loading ? "var(--gold)" : agents.length ? "var(--green)" : "rgba(0,255,65,0.4)" },
+            { label: 'ACTIVE AGENTS', value: `${activeCount}/${AGENTS.length}`, color: 'var(--green)' },
+            { label: 'STANDBY', value: AGENTS.filter((a) => a.status === 'STANDBY').length.toString(), color: 'var(--gold)' },
+            { label: 'TASKS DEPLOYED', value: tasks.length.toString(), color: 'var(--cyan)' },
+            { label: 'SWARM STATUS', value: 'ONLINE', color: 'var(--green)' },
           ].map(({ label, value, color }) => (
             <div key={label}>
-              <p style={{ fontSize: "8px", letterSpacing: "0.2em", color: "rgba(0,255,65,0.35)", marginBottom: "2px" }}>{label}</p>
-              <p style={{ fontSize: "18px", fontFamily: "var(--font-display)", color, fontWeight: 700 }}>{value}</p>
+              <p style={{ fontSize: '8px', letterSpacing: '0.2em', color: 'rgba(0,255,65,0.35)', marginBottom: '2px' }}>{label}</p>
+              <p style={{ fontSize: '18px', fontFamily: 'var(--font-display)', color, fontWeight: 700 }}>{value}</p>
             </div>
           ))}
         </div>
 
         {/* Agent grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px", marginBottom: "20px" }}>
-          <AnimatePresence>
-            {displayAgents.map((agent, i) => {
-              const color = TYPE_COLORS[agent.type] ?? "var(--green)";
-              const isActive = agent.status === "active";
-              const isLaunching = launching === agent.id;
-
-              return (
-                <motion.div
-                  key={agent.id}
-                  className="glass-panel"
-                  style={{ border: `1px solid ${isActive ? color : "rgba(0,255,65,0.18)"}`, boxShadow: isActive ? `0 0 16px ${color}22` : "none" }}
-                  initial={{ opacity: 0, scale: 0.97 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.3, delay: i * 0.05 }}
-                >
-                  <div className="corner corner-tl" />
-
-                  {/* Agent header */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span style={{ fontSize: "18px", color, textShadow: `0 0 10px ${color}` }}>{agent.glyph}</span>
-                      <div>
-                        <p style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.1em", color, fontFamily: "var(--font-display)" }}>{agent.name}</p>
-                        <p style={{ fontSize: "9px", color: "rgba(0,255,65,0.35)", letterSpacing: "0.1em" }}>{agent.type.toUpperCase()}</p>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                      <div style={{
-                        width: 8, height: 8, borderRadius: "50%",
-                        background: isActive ? color : "rgba(0,255,65,0.2)",
-                        boxShadow: isActive ? `0 0 10px ${color}` : "none",
-                        animation: isActive ? "pulse 1s infinite" : "none",
-                      }} />
-                      <span style={{ fontSize: "9px", color: isActive ? color : "rgba(0,255,65,0.3)", letterSpacing: "0.15em" }}>
-                        {agent.status.toUpperCase()}
-                      </span>
-                    </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px', marginBottom: '20px' }}>
+          {AGENTS.map((agent, i) => {
+            const isActive = agent.status === 'ACTIVE'
+            const color = isActive ? 'var(--green)' : 'var(--gold)'
+            return (
+              <div
+                key={agent.id}
+                className="glass-panel"
+                style={{ border: `1px solid ${isActive ? 'rgba(0,255,65,0.2)' : 'rgba(255,215,0,0.15)'}`, padding: '12px' }}
+              >
+                <div className="corner corner-tl" />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <p style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.1em', color, fontFamily: 'var(--font-display)' }}>{agent.name}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div
+                      style={{
+                        width: 7, height: 7, borderRadius: '50%',
+                        background: color,
+                        boxShadow: isActive ? `0 0 8px ${color}` : 'none',
+                        animation: isActive ? 'pulse 2s infinite' : 'none',
+                        animationDelay: `${i * 0.2}s`,
+                      }}
+                    />
+                    <span style={{ fontSize: '8px', color, letterSpacing: '0.15em' }}>{agent.status}</span>
                   </div>
-
-                  {/* Task / description */}
-                  <p style={{ fontSize: "10px", color: isActive ? "rgba(0,255,65,0.7)" : "rgba(0,255,65,0.35)", minHeight: "28px", lineHeight: 1.5, marginBottom: "10px" }}>
-                    {isActive && agent.task ? agent.task : agent.description}
-                  </p>
-
-                  {/* Metrics */}
-                  <div style={{ display: "flex", gap: "16px", fontSize: "9px", color: "rgba(0,255,65,0.35)", marginBottom: "10px" }}>
-                    <span>RUNS: <span style={{ color: "var(--green)" }}>{agent.executions}</span></span>
-                    {isActive && agent.startedAt && (
-                      <span>ELAPSED: <span style={{ color }}>{elapsed(agent.startedAt)}</span></span>
-                    )}
-                  </div>
-
-                  {/* Active progress bar */}
-                  {isActive && (
-                    <div className="prog-track" style={{ marginBottom: "10px" }}>
-                      <div className="prog-fill" style={{
-                        width: "60%",
-                        background: `linear-gradient(90deg, ${color}66, ${color})`,
-                        animation: "progressPulse 2s ease-in-out infinite alternate",
-                      }} />
-                    </div>
-                  )}
-
-                  {/* Task input + launch/stop */}
-                  {!isActive ? (
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <input
-                        value={taskInput[agent.id] ?? ""}
-                        onChange={(e) => setTaskInput((p) => ({ ...p, [agent.id]: e.target.value }))}
-                        placeholder="Optional task description"
-                        className="terminal-input"
-                        style={{ flex: 1, fontSize: "10px", padding: "5px 4px" }}
-                        onKeyDown={(e) => e.key === "Enter" && launchAgent(agent.id)}
-                      />
-                      <button
-                        onClick={() => launchAgent(agent.id)}
-                        disabled={isLaunching}
-                        style={{ fontSize: "9px", padding: "5px 12px", background: "transparent", border: `1px solid ${color}55`, color, cursor: "pointer", letterSpacing: "0.1em", flexShrink: 0 }}>
-                        {isLaunching ? "…" : "▶ RUN"}
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => stopAgent(agent.id)}
-                      style={{ width: "100%", fontSize: "9px", padding: "5px", background: "rgba(255,60,60,0.05)", border: "1px solid rgba(255,60,60,0.2)", color: "rgba(255,100,100,0.6)", cursor: "pointer", letterSpacing: "0.15em" }}>
-                      ■ STOP
-                    </button>
-                  )}
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
+                </div>
+                <p style={{ fontSize: '10px', color: 'rgba(0,255,65,0.4)', lineHeight: 1.5 }}>{agent.role}</p>
+              </div>
+            )
+          })}
         </div>
 
-        {/* Execution log */}
-        {(swarm?.log?.length ?? 0) > 0 && (
-          <div className="glass-panel">
-            <div className="corner corner-tl" />
-            <div className="panel-title">◈ EXECUTION LOG</div>
-            {swarm!.log.map((entry, i) => (
-              <div key={i} style={{ display: "flex", gap: "10px", fontSize: "10px", padding: "3px 0", borderBottom: "1px solid rgba(0,255,65,0.04)", fontFamily: "var(--font-mono)" }}>
-                <span style={{ color: "rgba(0,255,65,0.25)", flexShrink: 0 }}>{fmtTime(entry.ts)}</span>
-                <span style={{ color: "var(--green)", flexShrink: 0 }}>{entry.glyph}</span>
-                <span style={{ color: "rgba(0,255,65,0.6)" }}>{entry.agentName}</span>
-                <span style={{ color: "rgba(0,255,65,0.35)" }}>{entry.action}</span>
-                {entry.task && <span style={{ color: "rgba(0,200,255,0.5)" }}>— {entry.task}</span>}
-              </div>
-            ))}
+        {/* Task deployment panel */}
+        <div className="glass-panel" style={{ marginBottom: '16px' }}>
+          <div className="corner corner-tl" />
+          <div className="panel-title">◈ DEPLOY TASK</div>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <input
+              value={taskInput}
+              onChange={(e) => setTaskInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && deployTask()}
+              placeholder="Deploy a task in plain English... (e.g. 'narrative scan for AI tokens')"
+              style={{ flex: 1, background: 'rgba(0,10,3,0.9)', border: '1px solid rgba(0,255,65,0.25)', color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '8px 10px', outline: 'none' }}
+            />
+            <button
+              onClick={deployTask}
+              disabled={deploying || !taskInput.trim()}
+              style={{ padding: '8px 16px', background: taskInput.trim() ? 'rgba(0,255,65,0.06)' : 'transparent', border: `1px solid ${taskInput.trim() ? 'rgba(0,255,65,0.4)' : 'rgba(0,255,65,0.15)'}`, color: taskInput.trim() ? 'var(--green)' : 'rgba(0,255,65,0.3)', fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.15em', cursor: taskInput.trim() ? 'pointer' : 'not-allowed' }}
+            >
+              {deploying ? '...' : 'DEPLOY'}
+            </button>
           </div>
-        )}
+          <p style={{ fontSize: '9px', color: 'rgba(0,255,65,0.25)' }}>
+            Keywords auto-routed to Aeon: narrative · alert · monitor · defi · report · market · brief · wallet
+          </p>
+
+          {tasks.length > 0 && (
+            <div style={{ marginTop: '12px', borderTop: '1px solid rgba(0,255,65,0.08)', paddingTop: '10px' }}>
+              <p style={{ fontSize: '9px', letterSpacing: '0.15em', color: 'rgba(0,255,65,0.35)', marginBottom: '6px' }}>RECENT TASKS</p>
+              {tasks.slice(0, 8).map((t) => (
+                <div key={t.id} style={{ display: 'flex', gap: '10px', fontSize: '10px', padding: '4px 0', borderBottom: '1px solid rgba(0,255,65,0.04)', alignItems: 'flex-start' }}>
+                  <span style={{ color: 'rgba(0,255,65,0.25)', flexShrink: 0, fontSize: '9px' }}>{new Date(t.ts).toLocaleTimeString()}</span>
+                  <span
+                    style={{
+                      padding: '1px 5px', fontSize: '8px', letterSpacing: '0.1em', flexShrink: 0,
+                      border: `1px solid ${t.status === 'triggered' ? 'rgba(0,255,65,0.3)' : t.status === 'error' ? 'rgba(255,60,60,0.3)' : 'rgba(255,215,0,0.3)'}`,
+                      color: t.status === 'triggered' ? 'var(--green)' : t.status === 'error' ? '#ff4466' : 'var(--gold)',
+                    }}
+                  >
+                    {t.status.toUpperCase()}
+                  </span>
+                  <span style={{ color: 'rgba(0,255,65,0.6)' }}>{t.text}</span>
+                  {t.message && <span style={{ color: 'rgba(0,255,65,0.3)', marginLeft: 'auto', fontSize: '9px', flexShrink: 0 }}>{t.message}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* MiroShark section */}
+        <div className="glass-panel">
+          <div className="corner corner-tl" />
+          <div className="panel-title">◈ MIROSHARK — SWARM SIMULATION</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <p style={{ fontSize: '11px', color: 'rgba(0,255,65,0.7)', marginBottom: '4px' }}>200 AI agents · narrative stress test</p>
+              <p style={{ fontSize: '10px', color: 'rgba(0,255,65,0.4)' }}>Multi-agent conviction scoring for any token narrative</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+              <span
+                style={{
+                  padding: '3px 10px', fontSize: '9px', letterSpacing: '0.15em',
+                  border: `1px solid ${MIROSHARK_CONFIGURED ? 'rgba(0,255,65,0.3)' : 'rgba(255,60,60,0.3)'}`,
+                  color: MIROSHARK_CONFIGURED ? 'var(--green)' : '#ff4466',
+                }}
+              >
+                {MIROSHARK_CONFIGURED ? '● AVAILABLE' : '● OFFLINE'}
+              </span>
+              {!MIROSHARK_CONFIGURED && (
+                <a
+                  href="https://github.com/aaronjmars/MiroShark"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: '9px', color: 'rgba(0,200,255,0.5)', textDecoration: 'none' }}
+                >
+                  Connect at github.com/aaronjmars/MiroShark →
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </main>
-  );
+  )
 }

@@ -1,138 +1,239 @@
-"use client";
-import { useEffect, useState, useCallback, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+'use client'
+import { useEffect, useState, useCallback } from 'react'
 
-const API = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
-const AUTO_REFRESH_MS = 90000;
+interface GlobalData {
+  totalMcap?: number
+  vol24h?: number
+  btcDominance?: number
+  ethDominance?: number
+  mcapChange24h?: number
+  activeCryptos?: number
+}
 
-const FALLBACK: Narrative[] = [
-  { title: "AI AGENTS",      desc: "Autonomous on-chain agents gaining traction on Base",  strength: 92 },
-  { title: "BASE ECOSYSTEM", desc: "TVL and developer activity surging on Base",            strength: 84 },
-  { title: "MEME META",      desc: "Cultural tokens driving community-led narratives",      strength: 71 },
-  { title: "DePIN",          desc: "Decentralized physical infrastructure growing",         strength: 63 },
-  { title: "RESTAKING",      desc: "Yield optimization via restaking protocols",            strength: 58 },
-  { title: "SOCIAL FI",      desc: "On-chain social platforms and identity emerging",       strength: 47 },
-];
+interface TrendingCoin {
+  symbol?: string
+  name?: string
+  marketCapRank?: number
+  thumb?: string
+}
 
-type Narrative = { title: string; desc: string; strength: number };
+interface BasePool {
+  symbol?: string
+  price?: number
+  change24h?: number
+  volume24h?: number
+  liquidity?: number
+}
 
-function strengthMeta(s: number) {
-  if (s > 80) return { label: "HIGH", color: "var(--green)", border: "rgba(0,255,65,0.4)", bar: "var(--green)" };
-  if (s > 60) return { label: "MED",  color: "var(--gold)",  border: "rgba(255,215,0,0.4)", bar: "var(--gold)" };
-  return             { label: "LOW",  color: "rgba(0,255,65,0.45)", border: "rgba(0,255,65,0.15)", bar: "rgba(0,255,65,0.4)" };
+interface IntelData {
+  global?: GlobalData | null
+  trending?: TrendingCoin[]
+  basePools?: BasePool[]
+  timestamp?: number
+  error?: string
+}
+
+function fmtP(n: number): string {
+  if (!n || !isFinite(n)) return 'n/a'
+  if (n >= 1e12) return '$' + (n / 1e12).toFixed(2) + 'T'
+  if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B'
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M'
+  if (n >= 1e3) return '$' + (n / 1e3).toFixed(2) + 'K'
+  return '$' + n.toFixed(4)
+}
+
+function fmtC(n: number): string {
+  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%'
 }
 
 export default function IntelPage() {
-  const [narratives, setNarratives] = useState<Narrative[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastScan, setLastScan] = useState("");
-  const [fallback, setFallback] = useState(false);
-  const [autoNext, setAutoNext] = useState(AUTO_REFRESH_MS);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const countRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [data, setData] = useState<IntelData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState('')
+  const [lastFetch, setLastFetch] = useState<number>(0)
+  const [ticker, setTicker] = useState(0)
 
-  const scan = useCallback(async () => {
-    setLoading(true); setFallback(false);
+  const fetchIntel = useCallback(async () => {
+    setLoading(true)
+    setFetchError('')
     try {
-      let parsed: Narrative[] | null = null;
-      try {
-        const r = await fetch(`${API}/narratives`, { signal: AbortSignal.timeout(8000) });
-        if (r.ok) {
-          const d = await r.json();
-          if (Array.isArray(d) && d.length > 0)   parsed = d;
-          else if (Array.isArray(d?.narratives))   parsed = d.narratives;
-        }
-      } catch { /* fallthrough */ }
-      if (parsed && parsed.length > 0) {
-        setNarratives(parsed.map((n: Record<string, unknown>) => ({
-          title:    String(n.title ?? n.topic ?? "UNKNOWN"),
-          desc:     String(n.desc ?? n.description ?? ""),
-          strength: Number(n.strength ?? n.score ?? Math.floor(Math.random() * 60) + 30),
-        })));
-      } else { setNarratives(FALLBACK); setFallback(true); }
-    } catch { setNarratives(FALLBACK); setFallback(true); }
-    setLastScan(new Date().toLocaleTimeString());
-    setLoading(false); setAutoNext(AUTO_REFRESH_MS);
-  }, []);
+      const r = await fetch('/api/intel')
+      const d = (await r.json()) as IntelData
+      if (d.error && !d.global && !d.trending?.length && !d.basePools?.length) {
+        setFetchError(d.error)
+      } else {
+        setData(d)
+        setLastFetch(Date.now())
+      }
+    } catch {
+      setFetchError('Intel API unavailable')
+    }
+    setLoading(false)
+  }, [])
 
-  useEffect(() => { scan(); }, [scan]);
+  useEffect(() => { fetchIntel() }, [fetchIntel])
   useEffect(() => {
-    timerRef.current = setInterval(scan, AUTO_REFRESH_MS);
-    countRef.current = setInterval(() => setAutoNext(n => Math.max(0, n - 1000)), 1000);
-    return () => { clearInterval(timerRef.current!); clearInterval(countRef.current!); };
-  }, [scan]);
+    const t = setInterval(fetchIntel, 30000)
+    const tick = setInterval(() => setTicker((n) => n + 1), 1000)
+    return () => { clearInterval(t); clearInterval(tick) }
+  }, [fetchIntel])
 
-  const nextIn = Math.ceil(autoNext / 1000);
+  const secondsAgo = lastFetch ? Math.floor((Date.now() - lastFetch) / 1000) : null
 
   return (
-    <main className="page-wrapper" style={{ padding: "64px 16px 48px" }}>
-      <div style={{ maxWidth: "960px", margin: "0 auto" }}>
-        <div style={{ marginBottom: "20px", display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: "12px" }}>
+    <main className="page-wrapper" style={{ padding: '64px 16px 48px' }}>
+      <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+        <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
           <div>
-            <p style={{ fontSize: "9px", letterSpacing: "0.3em", color: "rgba(0,255,65,0.35)" }}>BANKRSYNTH://</p>
-            <h1 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: "clamp(16px,3vw,22px)", letterSpacing: "0.2em", color: "var(--green)", textShadow: "0 0 20px rgba(0,255,65,0.4)", marginTop: "4px" }}>
-              ◎ INTEL // NARRATIVE SCANNER
+            <p style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'rgba(0,255,65,0.35)' }}>BANKRSYNTH://</p>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(16px,3vw,22px)', fontWeight: 700, letterSpacing: '0.2em', color: 'var(--green)', textShadow: '0 0 20px rgba(0,255,65,0.4)', marginTop: '4px' }}>
+              ◎ INTEL // MARKET INTELLIGENCE
             </h1>
-            {fallback && <p style={{ fontSize: "9px", color: "var(--gold)", marginTop: "4px" }}>⚠ Using cached data — live feed unavailable</p>}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {lastScan && (
-              <div style={{ textAlign: "right" }}>
-                <p style={{ fontSize: "9px", color: "rgba(0,255,65,0.35)" }}>LAST: {lastScan}</p>
-                <p style={{ fontSize: "9px", color: "rgba(0,255,65,0.25)" }}>NEXT: {nextIn}s</p>
-              </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {secondsAgo !== null && ticker >= 0 && (
+              <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.3)' }}>updated {secondsAgo}s ago · auto-refresh 30s</span>
             )}
-            <button onClick={scan} disabled={loading} className="neon-btn" style={{ width: "auto", padding: "7px 16px", fontSize: "10px" }}>
-              {loading ? "SCANNING…" : "↺ RESCAN"}
+            <button onClick={fetchIntel} disabled={loading} className="neon-btn" style={{ width: 'auto', padding: '6px 14px', fontSize: '10px' }}>
+              {loading ? 'LOADING...' : '↺ REFRESH'}
             </button>
           </div>
         </div>
 
-        {loading && (
-          <div className="glass-panel" style={{ marginBottom: "16px" }}>
-            <div className="corner corner-tl" />
-            <div className="panel-title">SCAN IN PROGRESS</div>
-            {["connecting to narrative feeds","scanning Base activity","processing signal data","ranking narratives"].map((s,i) => (
-              <motion.p key={s} className="muted" style={{ fontSize: "11px", marginBottom: "4px" }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.3 }}>
-                &gt; {s}…
-              </motion.p>
-            ))}
-            <span className="cursor-blink" style={{ color: "var(--green)" }}>_</span>
+        {fetchError && (
+          <div style={{ marginBottom: '16px', padding: '10px 14px', border: '1px solid rgba(255,60,60,0.3)', color: '#ff4466', fontSize: '11px' }}>
+            ✗ {fetchError}
           </div>
         )}
 
-        {!loading && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))", gap: "12px" }}>
-            <AnimatePresence>
-              {narratives.map((n, i) => {
-                const { label, color, border, bar } = strengthMeta(n.strength);
-                return (
-                  <motion.div key={`${n.title}-${i}`} className="glass-panel"
-                    initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35, delay: i * 0.06 }}>
-                    <div className="corner corner-tl" />
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "10px", gap: "8px" }}>
-                      <div>
-                        <p className="muted" style={{ fontSize: "9px", letterSpacing: "0.15em", marginBottom: "2px" }}>#{i+1}</p>
-                        <p style={{ fontSize: "13px", letterSpacing: "0.12em", fontWeight: 700, color: "var(--green)", fontFamily: "var(--font-display)" }}>{n.title}</p>
-                      </div>
-                      <span style={{ fontSize: "9px", padding: "3px 8px", border: `1px solid ${border}`, color, letterSpacing: "0.2em", flexShrink: 0 }}>{label}</span>
-                    </div>
-                    <p className="muted" style={{ fontSize: "11px", lineHeight: 1.55, marginBottom: "10px", minHeight: "32px" }}>{n.desc}</p>
-                    <div className="prog-wrap">
-                      <div className="prog-label"><span>SIGNAL</span><span>{n.strength}%</span></div>
-                      <div className="prog-track">
-                        <motion.div style={{ height: "100%", background: `linear-gradient(90deg, ${bar}88, ${bar})`, boxShadow: `0 0 6px ${bar}` }}
-                          initial={{ width: 0 }} animate={{ width: `${n.strength}%` }} transition={{ duration: 0.8, delay: i * 0.06 + 0.2 }} />
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
+        {loading && !data && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+            {[...Array(4)].map((_, i) => (
+              <div key={i} style={{ height: '100px', background: 'rgba(0,255,65,0.03)', border: '1px solid rgba(0,255,65,0.08)', animation: 'pulse 1.5s ease-in-out infinite', animationDelay: `${i * 0.1}s` }} />
+            ))}
           </div>
+        )}
+
+        {data && (
+          <>
+            {/* Row 1 — 4 cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+              {/* Total MCap */}
+              <div className="glass-panel" style={{ borderTop: '2px solid rgba(0,255,65,0.4)' }}>
+                <div className="corner corner-tl" />
+                <p style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'rgba(0,255,65,0.4)', marginBottom: '6px' }}>TOTAL MARKET CAP</p>
+                {data.global?.totalMcap ? (
+                  <>
+                    <p style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 700, color: 'var(--green)', textShadow: '0 0 12px rgba(0,255,65,0.4)' }}>
+                      {fmtP(data.global.totalMcap)}
+                    </p>
+                    {data.global.mcapChange24h !== undefined && (
+                      <p style={{ fontSize: '10px', color: data.global.mcapChange24h >= 0 ? 'var(--green)' : 'var(--red)', marginTop: '4px' }}>
+                        {fmtC(data.global.mcapChange24h)} 24h
+                      </p>
+                    )}
+                  </>
+                ) : <p style={{ color: 'rgba(0,255,65,0.3)', fontSize: '11px' }}>unavailable</p>}
+              </div>
+
+              {/* 24h Volume */}
+              <div className="glass-panel" style={{ borderTop: '2px solid rgba(255,26,60,0.4)' }}>
+                <div className="corner corner-tl" />
+                <p style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'rgba(0,255,65,0.4)', marginBottom: '6px' }}>24H VOLUME</p>
+                {data.global?.vol24h ? (
+                  <p style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 700, color: 'var(--red)', textShadow: '0 0 12px rgba(255,26,60,0.4)' }}>
+                    {fmtP(data.global.vol24h)}
+                  </p>
+                ) : <p style={{ color: 'rgba(0,255,65,0.3)', fontSize: '11px' }}>unavailable</p>}
+              </div>
+
+              {/* BTC Dominance */}
+              <div className="glass-panel" style={{ borderTop: '2px solid rgba(255,215,0,0.4)' }}>
+                <div className="corner corner-tl" />
+                <p style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'rgba(0,255,65,0.4)', marginBottom: '6px' }}>BTC DOMINANCE</p>
+                {data.global?.btcDominance !== undefined ? (
+                  <>
+                    <p style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 700, color: 'var(--gold)', textShadow: '0 0 12px rgba(255,215,0,0.4)' }}>
+                      {data.global.btcDominance.toFixed(1)}%
+                    </p>
+                    <div style={{ marginTop: '8px' }}>
+                      <div className="prog-track">
+                        <div className="prog-fill" style={{ width: `${data.global.btcDominance}%`, background: 'linear-gradient(90deg, rgba(255,215,0,0.5), var(--gold))' }} />
+                      </div>
+                    </div>
+                  </>
+                ) : <p style={{ color: 'rgba(0,255,65,0.3)', fontSize: '11px' }}>unavailable</p>}
+              </div>
+
+              {/* Base Network */}
+              <div className="glass-panel" style={{ borderTop: '2px solid rgba(0,200,255,0.4)' }}>
+                <div className="corner corner-tl" />
+                <p style={{ fontSize: '9px', letterSpacing: '0.2em', color: 'rgba(0,255,65,0.4)', marginBottom: '6px' }}>BASE NETWORK</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--cyan)', boxShadow: '0 0 10px var(--cyan)', animation: 'pulse 2s infinite' }} />
+                  <p style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--cyan)', textShadow: '0 0 12px rgba(0,200,255,0.4)' }}>ONLINE</p>
+                </div>
+                <a href="https://basescan.org" target="_blank" rel="noopener noreferrer" style={{ fontSize: '9px', color: 'rgba(0,200,255,0.5)', textDecoration: 'none' }}>basescan.org →</a>
+                {data.global?.activeCryptos && (
+                  <p style={{ fontSize: '9px', color: 'rgba(0,255,65,0.3)', marginTop: '4px' }}>{data.global.activeCryptos.toLocaleString()} active cryptos</p>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2 — 2 cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(440px, 1fr))', gap: '12px' }}>
+              {/* CoinGecko Trending */}
+              <div className="glass-panel">
+                <div className="corner corner-tl" />
+                <div className="panel-title">◎ COINGECKO TRENDING</div>
+                {data.trending && data.trending.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {data.trending.slice(0, 8).map((coin, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', borderBottom: '1px solid rgba(0,255,65,0.06)' }}>
+                        <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.25)', width: '16px', flexShrink: 0 }}>#{i + 1}</span>
+                        {coin.thumb && (
+                          <img src={coin.thumb} alt={coin.symbol ?? ''} style={{ width: '16px', height: '16px', borderRadius: '50%', flexShrink: 0 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                        )}
+                        <span style={{ fontSize: '11px', color: 'var(--green)', fontWeight: 700, letterSpacing: '0.05em', minWidth: '60px' }}>{coin.symbol}</span>
+                        <span style={{ fontSize: '10px', color: 'rgba(0,255,65,0.45)' }}>{coin.name}</span>
+                        {coin.marketCapRank && (
+                          <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.25)', marginLeft: 'auto' }}>rank #{coin.marketCapRank}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '11px', color: 'rgba(0,255,65,0.3)' }}>CoinGecko data unavailable</p>
+                )}
+              </div>
+
+              {/* Base Trending */}
+              <div className="glass-panel">
+                <div className="corner corner-tl" />
+                <div className="panel-title">⬢ BASE TRENDING POOLS</div>
+                {data.basePools && data.basePools.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {data.basePools.slice(0, 8).map((pool, i) => {
+                      const chgColor = (pool.change24h ?? 0) >= 0 ? 'var(--green)' : 'var(--red)'
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', borderBottom: '1px solid rgba(0,255,65,0.06)' }}>
+                          <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.25)', width: '16px', flexShrink: 0 }}>#{i + 1}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--green)', fontWeight: 700, minWidth: '80px' }}>{pool.symbol ?? '?'}</span>
+                          <span style={{ fontSize: '11px', color: 'rgba(0,255,65,0.7)', fontFamily: 'var(--font-mono)', minWidth: '90px' }}>{fmtP(pool.price ?? 0)}</span>
+                          <span style={{ fontSize: '10px', color: chgColor, minWidth: '60px' }}>{pool.change24h !== undefined ? fmtC(pool.change24h) : ''}</span>
+                          <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.3)', marginLeft: 'auto' }}>vol {fmtP(pool.volume24h ?? 0)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '11px', color: 'rgba(0,255,65,0.3)' }}>GeckoTerminal data unavailable</p>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
     </main>
-  );
+  )
 }

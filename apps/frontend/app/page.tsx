@@ -5,20 +5,53 @@ import MiniChart from '@/components/ui/MiniChart'
 import TerminalLog from '@/components/ui/TerminalLog'
 import TxStream from '@/components/ui/TxStream'
 import AiMetrics from '@/components/ui/AiMetrics'
+import { useLiveBlockNumber, useLiveMarket } from '@/hooks/useLiveData'
 
 const CryptoSphere = dynamic(() => import('@/components/CryptoSphere'), { ssr: false })
 
 type Mode = 'sphere' | 'helix' | 'grid' | 'network' | 'terminal'
 const MODES: { key: Mode; label: string; icon: string }[] = [
-  { key: 'sphere', label: 'SPHERE', icon: '◉' },
-  { key: 'helix', label: 'HELIX', icon: '⌬' },
-  { key: 'grid', label: 'GRID', icon: '⊞' },
-  { key: 'network', label: 'NETWORK', icon: '⬡' },
+  { key: 'sphere',   label: 'SPHERE',   icon: '◉' },
+  { key: 'helix',    label: 'HELIX',    icon: '⌬' },
+  { key: 'grid',     label: 'GRID',     icon: '⊞' },
+  { key: 'network',  label: 'NETWORK',  icon: '⬡' },
   { key: 'terminal', label: 'TERMINAL', icon: '▸' },
 ]
 
+function fmtP(n: number | undefined): string {
+  if (!n || !isFinite(n)) return '...'
+  if (n >= 1e12) return '$' + (n / 1e12).toFixed(2) + 'T'
+  if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B'
+  return '$' + n.toFixed(2)
+}
+
 export default function Home() {
   const [mode, setMode] = useState<Mode>('sphere')
+  const { blockNumber, loading: blockLoading } = useLiveBlockNumber()
+  const market = useLiveMarket()
+
+  const statsBar = [
+    {
+      num: market?.totalMcap ? fmtP(market.totalMcap) : '...',
+      label: 'TOTAL MKT CAP',
+      color: 'var(--green)',
+    },
+    {
+      num: market?.vol24h ? fmtP(market.vol24h) : '...',
+      label: '24H VOLUME',
+      color: 'var(--red)',
+    },
+    {
+      num: market?.btcDominance ? market.btcDominance.toFixed(1) + '%' : '...',
+      label: 'BTC DOMINANCE',
+      color: 'var(--green)',
+    },
+    {
+      num: blockLoading ? '...' : '#' + blockNumber.toLocaleString(),
+      label: 'BASE BLOCK',
+      color: 'var(--cyan)',
+    },
+  ]
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh', paddingTop: '56px', overflow: 'hidden' }}>
@@ -94,17 +127,13 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Live stats bar */}
       <div className="home-stats-bar" style={{ position: 'fixed', bottom: '16px', left: '50%', transform: 'translateX(-50%)', width: 'min(700px, 90vw)', zIndex: 10 }}>
         <div className="glass-panel">
           <div className="home-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
-            {[
-              { num: '$2.91T', label: 'TOTAL MKT CAP', color: 'var(--green)' },
-              { num: '$847B', label: '24H VOLUME', color: 'var(--red)' },
-              { num: '52.4%', label: 'BTC DOMINANCE', color: 'var(--green)' },
-              { num: '74', label: 'FEAR & GREED', color: 'var(--cyan)' },
-            ].map(s => (
+            {statsBar.map(s => (
               <div key={s.label}>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(14px,2vw,20px)', fontWeight: 700, color: s.color, textShadow: `0 0 20px ${s.color}` }}>{s.num}</div>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(12px,1.8vw,18px)', fontWeight: 700, color: s.color, textShadow: `0 0 20px ${s.color}` }}>{s.num}</div>
                 <div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.4)', letterSpacing: '0.1em', marginTop: '2px' }}>{s.label}</div>
               </div>
             ))}
@@ -112,8 +141,8 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Mobile layout */}
       <div className="sm:hidden" style={{ padding: '12px', paddingBottom: '100px', zIndex: 10, position: 'relative' }}>
-        {/* Mobile mode switcher */}
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
           {MODES.map(m => (
             <button
@@ -129,10 +158,10 @@ export default function Home() {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
           <div className="glass-panel">
-            <div className="panel-title" style={{ marginBottom: '6px' }}>STATUS</div>
-            <div className="metric-row"><span className="metric-label">NETWORK</span><span className="metric-val" style={{ fontSize: '11px' }}>ONLINE</span></div>
-            <div className="metric-row"><span className="metric-label">AGENT</span><span className="metric-val cyan" style={{ fontSize: '11px' }}>ACTIVE</span></div>
-            <div className="metric-row"><span className="metric-label">TPS</span><span className="metric-val" style={{ fontSize: '11px' }}>4,193</span></div>
+            <div className="panel-title" style={{ marginBottom: '6px' }}>MARKET</div>
+            <div className="metric-row"><span className="metric-label">MCAP</span><span className="metric-val" style={{ fontSize: '10px' }}>{market?.totalMcap ? fmtP(market.totalMcap) : '...'}</span></div>
+            <div className="metric-row"><span className="metric-label">BTC DOM</span><span className="metric-val cyan" style={{ fontSize: '10px' }}>{market?.btcDominance ? market.btcDominance.toFixed(1) + '%' : '...'}</span></div>
+            <div className="metric-row"><span className="metric-label">BLOCK</span><span className="metric-val" style={{ fontSize: '10px' }}>#{blockLoading ? '...' : blockNumber.toLocaleString()}</span></div>
           </div>
           <div className="glass-panel red-panel">
             <div className="corner corner-tl" style={{ borderColor: 'rgba(255,26,60,0.4)' }} />

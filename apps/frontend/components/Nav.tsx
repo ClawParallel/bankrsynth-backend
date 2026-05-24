@@ -3,6 +3,8 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import WalletButton from './WalletButton'
+import BYOKModal from './BYOKModal'
+import { loadBYOK, PROVIDERS, type BYOKConfig } from '@/lib/byok'
 
 const modules = [
   { href: '/launch',   label: 'LAUNCH',   icon: '◈' },
@@ -19,12 +21,16 @@ export default function Nav() {
   const [clock, setClock] = useState('--:--:--')
   const [blockNum, setBlockNum] = useState(19847301)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [byok, setBYOK] = useState<BYOKConfig | null>(null)
+  const [showBYOK, setShowBYOK] = useState(false)
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date().toTimeString().slice(0, 8)), 1000)
     const b = setInterval(() => setBlockNum(n => n + 1), 12400)
     return () => { clearInterval(t); clearInterval(b) }
   }, [])
+
+  useEffect(() => { setBYOK(loadBYOK()) }, [])
 
   useEffect(() => { setMenuOpen(false) }, [path])
 
@@ -70,6 +76,28 @@ export default function Nav() {
             <span style={{ color: 'rgba(0,255,65,0.3)' }}>│</span>
             <span style={{ color: 'rgba(0,200,255,0.5)', fontSize: '9px' }}>#{blockNum.toLocaleString()}</span>
           </div>
+
+          {/* BYOK settings button */}
+          <button
+            onClick={() => setShowBYOK(true)}
+            style={{
+              background: 'none',
+              border: `1px solid ${byok ? 'rgba(0,255,65,0.3)' : 'rgba(255,26,60,0.3)'}`,
+              color: byok ? 'rgba(0,255,65,0.7)' : 'rgba(255,26,60,0.6)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '9px',
+              letterSpacing: '0.1em',
+              padding: '4px 8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              minHeight: 'var(--touch-target)',
+            }}
+          >
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: byok ? 'var(--green)' : 'var(--red)', boxShadow: byok ? '0 0 6px var(--green)' : '0 0 6px var(--red)', flexShrink: 0 }} />
+            <span className="hide-mobile">{byok ? (PROVIDERS[byok.provider]?.label?.split(' ')[0] ?? 'KEY') : 'api key'}</span>
+          </button>
 
           <WalletButton />
 
@@ -134,6 +162,9 @@ export default function Nav() {
           <div style={{ color: 'rgba(0,255,65,0.2)' }}>AI-NATIVE AUTONOMOUS TERMINAL</div>
         </div>
       </div>
+      {showBYOK && (
+        <BYOKModal onClose={() => { setShowBYOK(false); setBYOK(loadBYOK()) }} />
+      )}
     </>
   )
 }
