@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import BYOKModal from '@/components/BYOKModal'
-import { loadBYOK } from '@/lib/byok'
+import { loadBYOK, recordFreeUsage, FREE_LIMIT } from '@/lib/byok'
 
 interface Line {
   id: number
@@ -328,11 +328,6 @@ export default function TerminalPage() {
         if (!sym) { push(mkLine(`  usage: ${cmd} [SYMBOL]`, '#ff4466')); break }
 
         const config = loadBYOK()
-        if (!config) {
-          push(mkLine('  no API key configured — opening settings...', '#ff4466'))
-          setShowBYOK(true)
-          break
-        }
 
         push(mkLine(`  finding ${sym}...`, 'rgba(0,255,65,0.4)'))
         try {
@@ -347,23 +342,25 @@ export default function TerminalPage() {
           }
 
           if (!token) {
-            push(mkLine(`  ${sym} not found — try trending or high_volume bucket`, '#ff4466'))
+            push(mkLine(`  ${sym} not found — try 'trending' to see available tokens`, '#ff4466'))
             break
           }
 
-          const modeMap: Record<string, string> = { thesis: 'thesis', narrative: 'narrative', analyze: 'analyze' }
-          push(mkLine(`  synthesizing ${modeMap[cmd]} for ${sym} via ${config.provider}/${config.model}...`, 'rgba(0,255,65,0.4)'))
+          const via = config ? `${config.provider}/${config.model}` : 'BankrSynth (free)'
+          push(mkLine(`  synthesizing ${cmd} for ${sym} via ${via}...`, 'rgba(0,255,65,0.4)'))
+
+          const reqHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+          if (config) {
+            reqHeaders['X-API-Key'] = config.apiKey
+            reqHeaders['X-Provider'] = config.provider
+            reqHeaders['X-Model'] = config.model
+          }
 
           const sr = await fetch('/api/synth', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-API-Key': config.apiKey,
-              'X-Provider': config.provider,
-              'X-Model': config.model,
-            },
+            headers: reqHeaders,
             body: JSON.stringify({
-              mode: modeMap[cmd],
+              mode: cmd,
               tokenSymbol: token.symbol,
               tokenName: token.name,
               priceUsd: token.priceUsd,
@@ -377,10 +374,24 @@ export default function TerminalPage() {
             }),
           })
 
-          const sd = (await sr.json()) as { analysis?: string; error?: string }
+          const sd = (await sr.json()) as {
+            analysis?: string; error?: string; provider?: string; model?: string
+            isFallback?: boolean; remaining?: number; byokPrompt?: boolean
+          }
+
+          if (sr.status === 429) {
+            push(mkLine(`  ${sd.error ?? `free limit reached (${FREE_LIMIT}/day)`}`, '#ff4466'))
+            push(mkLine('  opening API key settings — Groq is free ↗', 'rgba(255,165,0,0.7)'))
+            setShowBYOK(true)
+            break
+          }
 
           if (sr.status === 401) {
-            push(mkLine('  invalid API key — opening settings...', '#ff4466'))
+            if (sd.byokPrompt) {
+              push(mkLine('  no API key and no free synthesis configured — opening settings...', '#ff4466'))
+            } else {
+              push(mkLine('  invalid API key — opening settings...', '#ff4466'))
+            }
             setShowBYOK(true)
             break
           }
@@ -409,7 +420,14 @@ export default function TerminalPage() {
               }, 15)
             })
           }
-          push(mkLine(''), mkLine(`  via ${config.provider}/${config.model} · your key`, 'rgba(0,255,65,0.3)'), mkLine(''))
+
+          if (sd.isFallback) {
+            recordFreeUsage(sd.remaining)
+            push(mkLine(`  via BankrSynth · free (${sd.remaining ?? 0} remaining today)`, 'rgba(0,255,65,0.3)'))
+          } else {
+            push(mkLine(`  via ${sd.provider ?? config?.provider}/${sd.model ?? config?.model} · your key`, 'rgba(0,255,65,0.3)'))
+          }
+          push(mkLine(''))
         } catch {
           push(mkLine('  synthesis request failed', '#ff4466'))
         }

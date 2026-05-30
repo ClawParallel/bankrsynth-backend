@@ -72,6 +72,30 @@ export default function Home() {
           ))}
         </div>
 
+        {/* Center CTA + feature cards */}
+        <div className="hide-mobile" style={{ position: 'absolute', left: '50%', top: '80px', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', pointerEvents: 'all', zIndex: 20 }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: '11px', letterSpacing: '0.2em', color: 'rgba(0,255,65,0.5)' }}>5 free syntheses/day · no wallet needed</div>
+            <div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.3)', marginTop: '2px' }}>Groq API key for unlimited · BYOK always free</div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {[
+              { icon: '◉', title: 'SYNTH', sub: 'AI thesis · narrative · analyze', href: '/synth' },
+              { icon: '◎', title: 'INTEL', sub: 'macro context · market brief', href: '/intel' },
+              { icon: '▶', title: 'TERMINAL', sub: 'all commands · live data', href: '/terminal' },
+            ].map(c => (
+              <a key={c.href} href={c.href} style={{ textDecoration: 'none' }}>
+                <div style={{ padding: '10px 14px', background: 'rgba(0,8,2,0.7)', border: '1px solid rgba(0,255,65,0.2)', backdropFilter: 'blur(4px)', width: '140px', transition: 'border-color 0.2s' }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(0,255,65,0.5)')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(0,255,65,0.2)')}>
+                  <div style={{ fontSize: '14px', color: 'var(--green)', marginBottom: '4px' }}>{c.icon} {c.title}</div>
+                  <div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.4)', lineHeight: 1.4 }}>{c.sub}</div>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', pointerEvents: 'all', gap: '12px' }}>
           <div className="hide-mobile" style={{ width: '240px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div className="glass-panel">

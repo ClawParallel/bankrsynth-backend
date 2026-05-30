@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import BYOKModal from '@/components/BYOKModal'
-import { loadBYOK } from '@/lib/byok'
+import { loadBYOK, getFreeUsage, recordFreeUsage, FREE_LIMIT } from '@/lib/byok'
 
 type Mode = 'analyze' | 'narrative' | 'thesis'
 type Bucket = 'trending' | 'new_launches' | 'high_volume' | 'ai_agents' | 'bankr_eco'
@@ -62,12 +62,16 @@ export default function SynthPage() {
   const [error, setError] = useState('')
   const [showBYOK, setShowBYOK] = useState(false)
   const [hasKey, setHasKey] = useState(false)
+  const [freeRemaining, setFreeRemaining] = useState(FREE_LIMIT)
   const [ticker, setTicker] = useState(0)
 
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typewriterRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  useEffect(() => { setHasKey(!!loadBYOK()) }, [])
+  useEffect(() => {
+    setHasKey(!!loadBYOK())
+    setFreeRemaining(getFreeUsage().remaining)
+  }, [])
   useEffect(() => { const t = setInterval(() => setTicker((n) => n + 1), 1000); return () => clearInterval(t) }, [])
 
   const fetchTokens = useCallback(async () => {
@@ -99,9 +103,9 @@ export default function SynthPage() {
   }
 
   async function synthesize() {
-    const config = loadBYOK()
-    if (!config) { setShowBYOK(true); return }
     if (!selectedToken) return
+
+    const config = loadBYOK()
 
     if (typewriterRef.current) clearInterval(typewriterRef.current)
     setLoading(true)
@@ -109,15 +113,17 @@ export default function SynthPage() {
     setOutputMeta('')
     setError('')
 
+    const reqHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (config) {
+      reqHeaders['X-API-Key'] = config.apiKey
+      reqHeaders['X-Provider'] = config.provider
+      reqHeaders['X-Model'] = config.model
+    }
+
     try {
       const res = await fetch('/api/synth', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': config.apiKey,
-          'X-Provider': config.provider,
-          'X-Model': config.model,
-        },
+        headers: reqHeaders,
         body: JSON.stringify({
           mode,
           tokenSymbol: selectedToken.symbol,
@@ -133,13 +139,31 @@ export default function SynthPage() {
         }),
       })
 
-      const data = (await res.json()) as { analysis?: string; error?: string; provider?: string; model?: string }
+      const data = (await res.json()) as {
+        analysis?: string; error?: string; provider?: string; model?: string
+        isFallback?: boolean; remaining?: number; byokPrompt?: boolean
+      }
       setLoading(false)
 
-      if (res.status === 401) { setShowBYOK(true); return }
+      if (res.status === 429) {
+        setError(data.error ?? `Free limit reached (${FREE_LIMIT}/day). Add your API key for unlimited.`)
+        setShowBYOK(true)
+        return
+      }
+      if (res.status === 401) {
+        setShowBYOK(true)
+        return
+      }
       if (!res.ok || data.error) { setError(data.error ?? 'Synthesis failed'); return }
 
-      setOutputMeta(`via ${data.provider}/${data.model} · your key`)
+      if (data.isFallback) {
+        recordFreeUsage(data.remaining)
+        const rem = data.remaining ?? 0
+        setFreeRemaining(rem)
+        setOutputMeta(`via BankrSynth · free (${rem} remaining today)`)
+      } else {
+        setOutputMeta(`via ${data.provider}/${data.model} · your key`)
+      }
 
       const text = data.analysis ?? ''
       let i = 0
@@ -212,21 +236,27 @@ export default function SynthPage() {
             ))}
           </div>
 
-          {/* No key warning */}
+          {/* Free / BYOK status hint */}
           {!hasKey && (
-            <div style={{ padding: '8px 12px', border: '1px solid rgba(255,215,0,0.3)', background: 'rgba(255,215,0,0.04)', fontSize: '10px', color: 'var(--gold)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Configure API key to synthesize</span>
-              <button onClick={() => { setShowBYOK(true) }} style={{ background: 'none', border: '1px solid rgba(255,215,0,0.3)', color: 'var(--gold)', cursor: 'pointer', fontSize: '9px', padding: '3px 8px', letterSpacing: '0.1em', fontFamily: 'var(--font-mono)' }}>Configure →</button>
+            <div style={{ padding: '7px 12px', border: `1px solid ${freeRemaining > 0 ? 'rgba(0,255,65,0.15)' : 'rgba(255,165,0,0.3)'}`, background: freeRemaining > 0 ? 'rgba(0,255,65,0.03)' : 'rgba(255,165,0,0.04)', fontSize: '10px', color: freeRemaining > 0 ? 'rgba(0,255,65,0.6)' : 'rgba(255,165,0,0.7)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{freeRemaining > 0 ? `free · ${freeRemaining}/${FREE_LIMIT} remaining today` : `free limit reached (${FREE_LIMIT}/day)`}</span>
+              <button onClick={() => setShowBYOK(true)} style={{ background: 'none', border: `1px solid ${freeRemaining > 0 ? 'rgba(0,255,65,0.2)' : 'rgba(255,165,0,0.3)'}`, color: freeRemaining > 0 ? 'rgba(0,255,65,0.5)' : 'rgba(255,165,0,0.7)', cursor: 'pointer', fontSize: '9px', padding: '3px 8px', letterSpacing: '0.1em', fontFamily: 'var(--font-mono)' }}>
+                {freeRemaining > 0 ? 'add key →' : 'Groq is free →'}
+              </button>
             </div>
           )}
 
           {/* Synthesize button */}
           <button
             onClick={synthesize}
-            disabled={loading || !selectedToken || !hasKey}
-            style={{ padding: '10px', background: (!selectedToken || !hasKey) ? 'transparent' : 'rgba(0,255,65,0.06)', border: `1px solid ${(!selectedToken || !hasKey) ? 'rgba(0,255,65,0.15)' : 'rgba(0,255,65,0.4)'}`, color: (!selectedToken || !hasKey) ? 'rgba(0,255,65,0.3)' : 'var(--green)', fontFamily: 'var(--font-display)', fontSize: '11px', letterSpacing: '0.2em', cursor: (!selectedToken || !hasKey) ? 'not-allowed' : 'pointer', textShadow: (!selectedToken || !hasKey) ? 'none' : '0 0 8px rgba(0,255,65,0.4)' }}
+            disabled={loading || !selectedToken}
+            style={{ padding: '10px', background: !selectedToken ? 'transparent' : 'rgba(0,255,65,0.06)', border: `1px solid ${!selectedToken ? 'rgba(0,255,65,0.15)' : 'rgba(0,255,65,0.4)'}`, color: !selectedToken ? 'rgba(0,255,65,0.3)' : 'var(--green)', fontFamily: 'var(--font-display)', fontSize: '11px', letterSpacing: '0.2em', cursor: !selectedToken ? 'not-allowed' : 'pointer', textShadow: !selectedToken ? 'none' : '0 0 8px rgba(0,255,65,0.4)' }}
           >
-            {loading ? '◉ SYNTHESIZING...' : `◉ SYNTHESIZE ${selectedToken ? selectedToken.symbol : ''}${mode !== 'analyze' ? ` — ${mode.toUpperCase()}` : ''}`}
+            {loading
+              ? '◉ SYNTHESIZING...'
+              : selectedToken
+                ? `◉ SYNTHESIZE ${selectedToken.symbol}${mode !== 'analyze' ? ` — ${mode.toUpperCase()}` : ''}${!hasKey ? ` · free` : ''}`
+                : '◉ SELECT TOKEN TO SYNTHESIZE'}
           </button>
 
           {/* Error */}
@@ -306,7 +336,7 @@ export default function SynthPage() {
       </div>
 
       {showBYOK && (
-        <BYOKModal onClose={() => { setShowBYOK(false); setHasKey(!!loadBYOK()) }} />
+        <BYOKModal onClose={() => { setShowBYOK(false); setHasKey(!!loadBYOK()); setFreeRemaining(getFreeUsage().remaining) }} />
       )}
     </main>
   )

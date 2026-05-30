@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import WalletButton from './WalletButton'
 import BYOKModal from './BYOKModal'
-import { loadBYOK, PROVIDERS, type BYOKConfig } from '@/lib/byok'
+import { loadBYOK, PROVIDERS, getFreeUsage, FREE_LIMIT, type BYOKConfig } from '@/lib/byok'
 
 const modules = [
   { href: '/launch',   label: 'LAUNCH',   icon: '◈' },
@@ -23,6 +23,7 @@ export default function Nav() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [byok, setBYOK] = useState<BYOKConfig | null>(null)
   const [showBYOK, setShowBYOK] = useState(false)
+  const [freeRemaining, setFreeRemaining] = useState(FREE_LIMIT)
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date().toTimeString().slice(0, 8)), 1000)
@@ -30,7 +31,15 @@ export default function Nav() {
     return () => { clearInterval(t); clearInterval(b) }
   }, [])
 
-  useEffect(() => { setBYOK(loadBYOK()) }, [])
+  useEffect(() => {
+    const update = () => {
+      setBYOK(loadBYOK())
+      setFreeRemaining(getFreeUsage().remaining)
+    }
+    update()
+    const t = setInterval(update, 5000)
+    return () => clearInterval(t)
+  }, [])
 
   useEffect(() => { setMenuOpen(false) }, [path])
 
@@ -82,8 +91,8 @@ export default function Nav() {
             onClick={() => setShowBYOK(true)}
             style={{
               background: 'none',
-              border: `1px solid ${byok ? 'rgba(0,255,65,0.3)' : 'rgba(255,26,60,0.3)'}`,
-              color: byok ? 'rgba(0,255,65,0.7)' : 'rgba(255,26,60,0.6)',
+              border: `1px solid ${byok ? 'rgba(0,255,65,0.3)' : freeRemaining > 0 ? 'rgba(0,255,65,0.2)' : 'rgba(255,165,0,0.3)'}`,
+              color: byok ? 'rgba(0,255,65,0.7)' : freeRemaining > 0 ? 'rgba(0,255,65,0.5)' : 'rgba(255,165,0,0.7)',
               fontFamily: 'var(--font-mono)',
               fontSize: '9px',
               letterSpacing: '0.1em',
@@ -95,8 +104,14 @@ export default function Nav() {
               minHeight: 'var(--touch-target)',
             }}
           >
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: byok ? 'var(--green)' : 'var(--red)', boxShadow: byok ? '0 0 6px var(--green)' : '0 0 6px var(--red)', flexShrink: 0 }} />
-            <span className="hide-mobile">{byok ? (PROVIDERS[byok.provider]?.label?.split(' ')[0] ?? 'KEY') : 'api key'}</span>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: byok ? 'var(--green)' : freeRemaining > 0 ? 'rgba(0,255,65,0.5)' : 'rgba(255,165,0,0.8)', boxShadow: byok ? '0 0 6px var(--green)' : freeRemaining > 0 ? '0 0 4px rgba(0,255,65,0.3)' : '0 0 6px rgba(255,165,0,0.5)', flexShrink: 0 }} />
+            <span className="hide-mobile">
+              {byok
+                ? (PROVIDERS[byok.provider]?.label?.split(' ')[0] ?? 'KEY')
+                : freeRemaining > 0
+                  ? `free (${freeRemaining}/${FREE_LIMIT})`
+                  : 'add key ↗'}
+            </span>
           </button>
 
           <WalletButton />

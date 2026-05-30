@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+const rateLimitMap = new Map<string, number>()
+const MAX_FREE_PER_DAY = 5
+
 const SYSTEM_PROMPT = `You are BankrSynth — an AI intelligence synthesis engine for Base ecosystem tokens.
 You provide structured, concise market analysis for crypto traders.
 Be direct, technical, and opinionated. No hedging. No disclaimers.
@@ -116,15 +119,44 @@ async function callGoogle(apiKey: string, model: string, prompt: string): Promis
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = req.headers.get('X-API-Key')
-  const provider = req.headers.get('X-Provider') || 'anthropic'
-  const model = req.headers.get('X-Model') || 'claude-sonnet-4-5'
+  let apiKey = req.headers.get('X-API-Key')
+  let provider = req.headers.get('X-Provider') || 'anthropic'
+  let model = req.headers.get('X-Model') || 'claude-sonnet-4-5'
+  let isFallback = false
 
   if (!apiKey) {
-    return NextResponse.json(
-      { error: 'No API key. Configure your key in Settings (top right).' },
-      { status: 401 },
-    )
+    const fallbackKey = process.env.ANTHROPIC_FALLBACK_KEY
+    if (!fallbackKey) {
+      return NextResponse.json(
+        { error: 'Configure your API key in Settings to use synthesis.', byokPrompt: true },
+        { status: 401 },
+      )
+    }
+
+    const ip =
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+      req.headers.get('x-real-ip') ||
+      'unknown'
+    const today = new Date().toISOString().split('T')[0]
+    const rlKey = `rl:${ip}:${today}`
+    const count = rateLimitMap.get(rlKey) || 0
+
+    if (count >= MAX_FREE_PER_DAY) {
+      return NextResponse.json(
+        {
+          error: `Free limit reached (${MAX_FREE_PER_DAY}/day). Add your API key for unlimited — Groq is free.`,
+          byokPrompt: true,
+          remaining: 0,
+        },
+        { status: 429 },
+      )
+    }
+
+    rateLimitMap.set(rlKey, count + 1)
+    apiKey = fallbackKey
+    provider = 'anthropic'
+    model = 'claude-haiku-4-5-20251001'
+    isFallback = true
   }
 
   const body = await req.json()
@@ -227,12 +259,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Empty response from LLM' }, { status: 500 })
     }
 
+    let remaining: number | null = null
+    if (isFallback) {
+      const ip =
+        req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+        req.headers.get('x-real-ip') ||
+        'unknown'
+      const today = new Date().toISOString().split('T')[0]
+      const used = rateLimitMap.get(`rl:${ip}:${today}`) || 0
+      remaining = Math.max(0, MAX_FREE_PER_DAY - used)
+    }
+
     return NextResponse.json({
       analysis,
       mode,
       symbol: tokenSymbol,
       provider,
       model,
+      isFallback,
+      remaining,
       timestamp: Date.now(),
     })
   } catch (e: unknown) {

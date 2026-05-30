@@ -109,3 +109,30 @@ export function clearBYOK() {
   if (typeof window === 'undefined') return
   Object.values(KEYS).forEach(k => localStorage.removeItem(k))
 }
+
+const FREE_KEY = 'bsynth_free'
+export const FREE_LIMIT = 5
+
+export function getFreeUsage(): { count: number; remaining: number } {
+  if (typeof window === 'undefined') return { count: 0, remaining: FREE_LIMIT }
+  const today = new Date().toISOString().split('T')[0]
+  try {
+    const raw = localStorage.getItem(FREE_KEY)
+    if (raw) {
+      const { date, count } = JSON.parse(raw) as { date: string; count: number }
+      if (date === today) return { count, remaining: Math.max(0, FREE_LIMIT - count) }
+    }
+  } catch { /* */ }
+  return { count: 0, remaining: FREE_LIMIT }
+}
+
+export function recordFreeUsage(serverRemaining?: number) {
+  if (typeof window === 'undefined') return
+  const today = new Date().toISOString().split('T')[0]
+  const newCount = serverRemaining !== undefined
+    ? FREE_LIMIT - serverRemaining
+    : getFreeUsage().count + 1
+  try {
+    localStorage.setItem(FREE_KEY, JSON.stringify({ date: today, count: newCount }))
+  } catch { /* */ }
+}
