@@ -263,6 +263,22 @@ html, body {
 .wallet-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); flex-shrink: 0; }
 .chain-name { color: rgba(0,255,65,0.45); font-size: 9px; }
 
+/* Aurora backdrop for the token-cloud visualization */
+.viz-aurora { position: fixed; inset: -20%; z-index: 0; pointer-events: none; filter: blur(70px); opacity: 0.5; }
+.viz-aurora .blob { position: absolute; border-radius: 50%; mix-blend-mode: screen; }
+.viz-aurora .b1 { width: 55vw; height: 55vw; left: -5%; top: -5%; background: radial-gradient(circle, rgba(0,255,65,0.35), transparent 70%); animation: auroraDrift 26s ease-in-out infinite; }
+.viz-aurora .b2 { width: 50vw; height: 50vw; right: -8%; top: 10%; background: radial-gradient(circle, rgba(0,200,255,0.28), transparent 70%); animation: auroraDrift 32s ease-in-out infinite reverse; }
+.viz-aurora .b3 { width: 45vw; height: 45vw; left: 25%; bottom: -10%; background: radial-gradient(circle, rgba(120,0,255,0.22), transparent 70%); animation: auroraDrift2 38s ease-in-out infinite; }
+@keyframes auroraDrift {
+  0%,100% { transform: translate(0,0) scale(1); }
+  33% { transform: translate(12vw,8vh) scale(1.15); }
+  66% { transform: translate(-8vw,-6vh) scale(0.9); }
+}
+@keyframes auroraDrift2 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  50% { transform: translate(-14vw,-4vh) scale(1.2); }
+}
+
 /* Nav right cluster — no overlap, single line */
 .nav-right {
   display: flex;
