@@ -7,14 +7,12 @@ import BYOKModal from './BYOKModal'
 import { loadBYOK, PROVIDERS, getFreeUsage, FREE_LIMIT, type BYOKConfig } from '@/lib/byok'
 
 const modules = [
-  { href: '/launch',   label: 'LAUNCH',   icon: '◈' },
-  { href: '/agent',    label: 'AGENT',    icon: '⬡' },
   { href: '/synth',    label: 'SYNTH',    icon: '◉' },
-  { href: '/arena',    label: 'ARENA',    icon: '⚔' },
-  { href: '/repos',    label: 'REPOS',    icon: '⬢' },
-  { href: '/swarm',    label: 'SWARM',    icon: '⬟' },
-  { href: '/terminal', label: 'TERMINAL', icon: '▶' },
   { href: '/intel',    label: 'INTEL',    icon: '◎' },
+  { href: '/terminal', label: 'TERMINAL', icon: '▶' },
+  { href: '/arena',    label: 'ARENA',    icon: '⚔' },
+  { href: '/swarm',    label: 'SWARM',    icon: '⬟' },
+  { href: '/repos',    label: 'REPOS',    icon: '⬢' },
 ]
 
 export default function Nav() {
@@ -75,57 +73,76 @@ export default function Nav() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="hide-mobile flex items-center gap-2" style={{ fontFamily: 'var(--font-mono)', fontSize: '10px' }}>
+        <div className="nav-right">
+          {/* Live clock / block — desktop only */}
+          <div className="hide-mobile flex items-center" style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', gap: '6px', marginRight: '2px' }}>
             <div className="flex items-center gap-1.5">
               <div className="status-dot" />
               <span style={{ color: 'rgba(0,255,65,0.5)', fontSize: '9px' }}>LIVE</span>
             </div>
             <span style={{ color: 'rgba(0,255,65,0.3)' }}>│</span>
-            <span style={{ color: 'rgba(0,255,65,0.6)', fontSize: '9px' }}>{clock}</span>
-            <span style={{ color: 'rgba(0,255,65,0.3)' }}>│</span>
             <span style={{ color: 'rgba(0,200,255,0.5)', fontSize: '9px' }}>#{blockNum.toLocaleString()}</span>
           </div>
 
-          {/* BYOK settings button */}
-          <button
-            onClick={() => setShowBYOK(true)}
+          {/* Free counter / provider badge */}
+          <span
+            className="free-counter hide-mobile"
             style={{
-              background: 'none',
-              border: `1px solid ${byok ? 'rgba(0,255,65,0.3)' : freeRemaining > 0 ? 'rgba(0,255,65,0.2)' : 'rgba(255,165,0,0.3)'}`,
-              color: byok ? 'rgba(0,255,65,0.7)' : freeRemaining > 0 ? 'rgba(0,255,65,0.5)' : 'rgba(255,165,0,0.7)',
               fontFamily: 'var(--font-mono)',
               fontSize: '9px',
               letterSpacing: '0.1em',
-              padding: '4px 8px',
-              cursor: 'pointer',
+              color: byok ? 'rgba(0,255,65,0.6)' : freeRemaining > 0 ? 'rgba(0,255,65,0.45)' : 'rgba(255,165,0,0.7)',
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
-              minHeight: 'var(--touch-target)',
+              whiteSpace: 'nowrap',
             }}
           >
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: byok ? 'var(--green)' : freeRemaining > 0 ? 'rgba(0,255,65,0.5)' : 'rgba(255,165,0,0.8)', boxShadow: byok ? '0 0 6px var(--green)' : freeRemaining > 0 ? '0 0 4px rgba(0,255,65,0.3)' : '0 0 6px rgba(255,165,0,0.5)', flexShrink: 0 }} />
-            <span className="hide-mobile">
-              {byok
-                ? (PROVIDERS[byok.provider]?.label?.split(' ')[0] ?? 'KEY')
-                : freeRemaining > 0
-                  ? `free (${freeRemaining}/${FREE_LIMIT})`
-                  : 'add key ↗'}
-            </span>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: byok ? 'var(--green)' : freeRemaining > 0 ? 'rgba(0,255,65,0.5)' : 'rgba(255,165,0,0.8)', boxShadow: byok ? '0 0 6px var(--green)' : 'none', flexShrink: 0 }} />
+            {byok
+              ? (PROVIDERS[byok.provider]?.label?.split(' ')[0] ?? 'KEY')
+              : freeRemaining > 0
+                ? `free (${freeRemaining}/${FREE_LIMIT})`
+                : 'limit reached'}
+          </span>
+
+          {/* API key button */}
+          <button
+            className="api-key-btn hide-mobile"
+            onClick={() => setShowBYOK(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'rgba(0,255,65,0.45)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '9px',
+              letterSpacing: '0.1em',
+              padding: '4px 6px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--green)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(0,255,65,0.45)')}
+          >
+            ⚙ api key
           </button>
 
+          {/* Connect wallet */}
           <ConnectButton.Custom>
-            {({ account, openConnectModal, openAccountModal, mounted }) => {
+            {({ account, chain, openConnectModal, openAccountModal, mounted }) => {
               if (!mounted) return null
               if (!account) return (
                 <button onClick={openConnectModal} className="wallet-btn">
-                  ◈ connect wallet
+                  connect wallet
                 </button>
               )
               return (
                 <button onClick={openAccountModal} className="wallet-btn connected">
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 6px var(--green)', display: 'inline-block', marginRight: '5px', flexShrink: 0 }} />
+                  <span className="wallet-dot" />
+                  {chain?.name && chain.name !== 'Base' && (
+                    <span className="chain-name">{chain.name} ·</span>
+                  )}
                   {account.displayName}
                 </button>
               )

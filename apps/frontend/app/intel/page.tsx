@@ -52,6 +52,25 @@ export default function IntelPage() {
   const [fetchError, setFetchError] = useState('')
   const [lastFetch, setLastFetch] = useState<number>(0)
   const [ticker, setTicker] = useState(0)
+  const [brief, setBrief] = useState('')
+  const [briefLoading, setBriefLoading] = useState(false)
+  const [briefError, setBriefError] = useState('')
+  const [briefAt, setBriefAt] = useState('')
+
+  async function generateBrief() {
+    setBriefLoading(true)
+    setBriefError('')
+    try {
+      const r = await fetch('/api/intel/brief', { method: 'POST' })
+      const d = (await r.json()) as { brief?: string; error?: string }
+      if (!r.ok || d.error) throw new Error(d.error ?? 'brief failed')
+      setBrief(d.brief ?? '')
+      setBriefAt(new Date().toLocaleTimeString())
+    } catch (e) {
+      setBriefError(e instanceof Error ? e.message : 'brief generation failed')
+    }
+    setBriefLoading(false)
+  }
 
   const fetchIntel = useCallback(async () => {
     setLoading(true)
@@ -233,6 +252,50 @@ export default function IntelPage() {
             </div>
           </>
         )}
+
+        {/* Section 3 — AI Market Brief */}
+        <div className="glass-panel" style={{ marginTop: '16px' }}>
+          <div className="corner corner-tl" />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+            <div className="panel-title" style={{ marginBottom: 0, borderBottom: 'none', paddingBottom: 0 }}>◉ AI MARKET BRIEF</div>
+            <button
+              onClick={generateBrief}
+              disabled={briefLoading}
+              className="neon-btn"
+              style={{ width: 'auto', padding: '6px 16px', fontSize: '10px' }}
+            >
+              {briefLoading ? '◉ GENERATING...' : brief ? '↻ REGENERATE' : '◉ GENERATE BRIEF'}
+            </button>
+          </div>
+
+          {!brief && !briefLoading && !briefError && (
+            <p style={{ fontSize: '10px', color: 'rgba(0,255,65,0.35)', lineHeight: 1.6 }}>
+              Generate a live AI market brief from current CoinGecko macro + GeckoTerminal Base data.
+              Powered by claude-sonnet-4-5.
+            </p>
+          )}
+
+          {briefLoading && (
+            <p style={{ fontSize: '11px', color: 'rgba(0,255,65,0.45)' }}>
+              fetching live data → synthesizing with claude-sonnet-4-5<span style={{ animation: 'blink 0.7s step-end infinite' }}>...</span>
+            </p>
+          )}
+
+          {briefError && (
+            <p style={{ fontSize: '11px', color: '#ff4466' }}>✗ {briefError}</p>
+          )}
+
+          {brief && !briefLoading && (
+            <div>
+              <div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.3)', letterSpacing: '0.15em', marginBottom: '8px' }}>
+                claude-sonnet-4-5 · generated {briefAt}
+              </div>
+              <pre style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', lineHeight: 1.7, color: 'rgba(0,255,65,0.85)', whiteSpace: 'pre-wrap', margin: 0, borderLeft: '2px solid var(--green)', paddingLeft: '12px' }}>
+                {brief}
+              </pre>
+            </div>
+          )}
+        </div>
       </div>
     </main>
   )
