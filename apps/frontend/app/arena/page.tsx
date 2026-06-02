@@ -26,6 +26,7 @@ interface Token {
 
 interface Holding { symbol: string; address: string; balance: number; priceUsd: number; valueUsd: number }
 interface SwapRecord { hash: string; summary: string; ts: number }
+interface LeaderEntry { wallet: string; displayName: string; currentValue: number; pnlPercent: number; rank: number }
 
 function fmtUsd(n: number): string {
   if (!n || !isFinite(n)) return '$0'
@@ -43,6 +44,26 @@ function fmtTok(n: number): string {
   return n.toPrecision(4)
 }
 function shortAddr(a: string): string { return `${a.slice(0, 6)}...${a.slice(-4)}` }
+function getCountdown(period: 'weekly' | 'monthly'): string {
+  const now = new Date()
+  const target = new Date(now)
+  if (period === 'weekly') {
+    const day = now.getUTCDay()
+    const daysUntil = day === 1 ? 7 : (8 - day) % 7 || 7
+    target.setUTCDate(now.getUTCDate() + daysUntil)
+    target.setUTCHours(0, 0, 0, 0)
+  } else {
+    target.setUTCMonth(now.getUTCMonth() + 1, 1)
+    target.setUTCHours(0, 0, 0, 0)
+  }
+  const diff = target.getTime() - now.getTime()
+  const d = Math.floor(diff / 86400000)
+  const h = Math.floor((diff % 86400000) / 3600000)
+  const m = Math.floor((diff % 3600000) / 60000)
+  if (d > 0) return `${d}d ${h}h ${m}m`
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
 function ts(ms: number): string {
   const d = Date.now() - ms
   if (d < 60000) return `${Math.floor(d / 1000)}s ago`
@@ -85,6 +106,11 @@ export default function ArenaPage() {
   const [status, setStatus] = useState<'idle' | 'approving' | 'swapping' | 'confirming' | 'success' | 'error'>('idle')
   const [statusMsg, setStatusMsg] = useState('')
   const [swaps, setSwaps] = useState<SwapRecord[]>([])
+
+  // Leaderboard
+  const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([])
+  const [lbPeriod, setLbPeriod] = useState<'weekly' | 'monthly'>('weekly')
+  const [countdown, setCountdown] = useState('')
 
   const searchRef = useRef<HTMLDivElement>(null)
   const quoteDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -174,6 +200,43 @@ export default function ArenaPage() {
       .then(d => setSelectedDecimals(Number(d)))
       .catch(() => setSelectedDecimals(18))
   }, [selected, publicClient])
+
+  // Leaderboard fetch
+  const loadLeaderboard = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/arena?period=${lbPeriod}`)
+      const d = (await r.json()) as { leaderboard?: LeaderEntry[] }
+      setLeaderboard(d.leaderboard ?? [])
+    } catch {}
+  }, [lbPeriod])
+
+  useEffect(() => {
+    loadLeaderboard()
+    const i = setInterval(loadLeaderboard, 30000)
+    return () => clearInterval(i)
+  }, [loadLeaderboard])
+
+  // Countdown to next reset
+  useEffect(() => {
+    setCountdown(getCountdown(lbPeriod))
+    const i = setInterval(() => setCountdown(getCountdown(lbPeriod)), 1000)
+    return () => clearInterval(i)
+  }, [lbPeriod])
+
+  // Register real portfolio value to the leaderboard (debounced)
+  useEffect(() => {
+    if (!isConnected || !onBase || !address) return
+    const ethAmt = ethBal ? Number(formatUnits(ethBal.value, ethBal.decimals)) : 0
+    const total = ethAmt * ethPrice + usdcBal + holdings.reduce((s, h) => s + h.valueUsd, 0)
+    if (total <= 0) return
+    const id = setTimeout(() => {
+      fetch('/api/arena', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register', wallet: address, value: total }),
+      }).then(() => loadLeaderboard()).catch(() => {})
+    }, 1200)
+    return () => clearTimeout(id)
+  }, [isConnected, onBase, address, ethBal, ethPrice, usdcBal, holdings, loadLeaderboard])
 
   // Derive tokenIn/tokenOut/decimals for the trade
   function tradeRoute() {
@@ -464,31 +527,79 @@ export default function ArenaPage() {
             )}
 
             {!selected && <div style={{ fontSize: '11px', color: 'rgba(0,255,65,0.3)', paddingTop: '8px' }}>Search a Base token above to start trading.</div>}
+
+            {/* Recent swaps */}
+            {swaps.length > 0 && (
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.4)', letterSpacing: '0.2em', marginBottom: '6px' }}>RECENT SWAPS</div>
+                <div style={{ border: '1px solid rgba(0,255,65,0.1)' }}>
+                  {swaps.slice(0, 8).map(s => (
+                    <div key={s.hash} style={{ padding: '6px 8px', borderBottom: '1px solid rgba(0,255,65,0.05)' }}>
+                      <div style={{ fontSize: '10px', color: 'rgba(0,255,65,0.75)', lineHeight: 1.5 }}>{s.summary}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                        <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.3)' }}>{ts(s.ts)}</span>
+                        <a href={`https://basescan.org/tx/${s.hash}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '9px', color: 'rgba(0,200,255,0.6)', textDecoration: 'none' }}>basescan ↗</a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* RIGHT: Recent swaps + info */}
+        {/* RIGHT: Leaderboard */}
         <div style={{ ...PANEL, width: '340px', minWidth: '280px', flexShrink: 0 }} className="hide-mobile">
-          <div style={TITLE}><span style={{ color: 'var(--green)' }}>▶</span> RECENT SWAPS</div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
-            {swaps.length === 0 ? (
-              <div style={{ fontSize: '10px', color: 'rgba(0,255,65,0.3)', lineHeight: 1.7 }}>No swaps yet this session.</div>
-            ) : swaps.map(s => (
-              <div key={s.hash} style={{ borderBottom: '1px solid rgba(0,255,65,0.06)', padding: '8px 0' }}>
-                <div style={{ fontSize: '10px', color: 'rgba(0,255,65,0.75)', lineHeight: 1.5 }}>{s.summary}</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '3px' }}>
-                  <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.3)' }}>{ts(s.ts)}</span>
-                  <a href={`https://basescan.org/tx/${s.hash}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '9px', color: 'rgba(0,200,255,0.6)', textDecoration: 'none' }}>basescan ↗</a>
-                </div>
-              </div>
+          <div style={TITLE}><span style={{ color: 'var(--green)' }}>▶</span> LEADERBOARD</div>
+
+          {/* Period tabs */}
+          <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,255,65,0.1)', flexShrink: 0 }}>
+            {(['weekly', 'monthly'] as const).map(p => (
+              <button key={p} onClick={() => setLbPeriod(p)} style={{ flex: 1, padding: '7px', fontSize: '9px', letterSpacing: '0.2em', fontFamily: 'var(--font-display)', cursor: 'pointer', border: 'none', borderBottom: `2px solid ${lbPeriod === p ? 'var(--green)' : 'transparent'}`, background: lbPeriod === p ? 'rgba(0,255,65,0.05)' : 'transparent', color: lbPeriod === p ? 'var(--green)' : 'rgba(0,255,65,0.4)' }}>
+                {p.toUpperCase()}
+              </button>
             ))}
           </div>
+
+          {/* Countdown */}
+          <div style={{ padding: '6px 12px', borderBottom: '1px solid rgba(0,255,65,0.06)', flexShrink: 0 }}>
+            <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.1em' }}>
+              resets {lbPeriod === 'weekly' ? 'Monday 00:00 UTC' : '1st of month UTC'} · {countdown} remaining
+            </span>
+          </div>
+
+          {/* Column headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 72px 72px', gap: '4px', padding: '5px 10px', borderBottom: '1px solid rgba(0,255,65,0.08)', flexShrink: 0 }}>
+            {['#', 'TRADER', 'P&L%', 'VALUE'].map(h => (
+              <div key={h} style={{ fontSize: '8px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.15em' }}>{h}</div>
+            ))}
+          </div>
+
+          {/* Rows */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {leaderboard.length === 0 && (
+              <div style={{ padding: '20px 12px', fontSize: '10px', color: 'rgba(0,255,65,0.3)' }}>No traders yet — connect and trade to join.</div>
+            )}
+            {leaderboard.map((e, i) => {
+              const rank = i + 1
+              const isMe = e.wallet.toLowerCase() === address?.toLowerCase()
+              const crown = rank === 1 ? '👑' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null
+              return (
+                <div key={e.wallet} style={{ display: 'grid', gridTemplateColumns: '28px 1fr 72px 72px', gap: '4px', padding: '6px 10px', borderBottom: '1px solid rgba(0,255,65,0.05)', background: isMe ? 'rgba(0,255,65,0.06)' : 'transparent', borderLeft: isMe ? '2px solid var(--green)' : '2px solid transparent' }}>
+                  <div style={{ fontSize: '11px', color: rank <= 3 ? 'var(--gold)' : 'rgba(0,255,65,0.5)' }}>{crown ?? `${rank}`}</div>
+                  <div style={{ fontSize: '10px', color: isMe ? 'var(--green)' : 'rgba(0,255,65,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)' }}>{e.displayName}{isMe && ' ← you'}</div>
+                  <div style={{ fontSize: '10px', color: e.pnlPercent >= 0 ? 'var(--green)' : 'var(--red)', textAlign: 'right' }}>{e.pnlPercent >= 0 ? '+' : ''}{e.pnlPercent.toFixed(1)}%</div>
+                  <div style={{ fontSize: '10px', color: 'rgba(0,255,65,0.7)', textAlign: 'right' }}>{fmtUsd(e.currentValue)}</div>
+                </div>
+              )
+            })}
+          </div>
+
           <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(0,255,65,0.08)', flexShrink: 0 }}>
             <div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.35)', lineHeight: 1.7 }}>
-              <div>◆ Real swaps via Uniswap V3 on Base</div>
-              <div>◆ You sign every transaction in your wallet</div>
-              <div>◆ 2% slippage · test with a small amount first</div>
-              <div>◆ Uniswap-only liquidity (some tokens unavailable)</div>
+              <div>◆ Ranked by real Base portfolio P&amp;L</div>
+              <div>◆ Top 10 weekly → Verified Analyst badge</div>
+              <div>◆ Top 3 monthly → Hall of Fame status</div>
             </div>
           </div>
         </div>
@@ -506,6 +617,30 @@ export default function ArenaPage() {
             <span style={{ color: 'var(--green)' }}>{fmtUsd(totalValue)}</span>
           </div>
         )}
+
+        {/* Mobile leaderboard */}
+        <div style={{ marginTop: '12px' }}>
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+            {(['weekly', 'monthly'] as const).map(p => (
+              <button key={p} onClick={() => setLbPeriod(p)} style={{ flex: 1, padding: '5px', fontSize: '9px', letterSpacing: '0.15em', cursor: 'pointer', border: `1px solid ${lbPeriod === p ? 'rgba(0,255,65,0.4)' : 'rgba(0,255,65,0.1)'}`, background: lbPeriod === p ? 'rgba(0,255,65,0.08)' : 'transparent', color: lbPeriod === p ? 'var(--green)' : 'rgba(0,255,65,0.4)', fontFamily: 'var(--font-display)' }}>
+                {p.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: '8px', color: 'rgba(0,255,65,0.3)', marginBottom: '6px' }}>{countdown} remaining</div>
+          {leaderboard.slice(0, 8).map((e, i) => {
+            const rank = i + 1
+            const isMe = e.wallet.toLowerCase() === address?.toLowerCase()
+            const crown = rank === 1 ? '👑' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null
+            return (
+              <div key={e.wallet} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(0,255,65,0.05)', background: isMe ? 'rgba(0,255,65,0.04)' : 'transparent' }}>
+                <span style={{ fontSize: '10px', color: isMe ? 'var(--green)' : 'rgba(0,255,65,0.6)' }}>{crown ?? `#${rank}`} {e.displayName}{isMe ? ' ←' : ''}</span>
+                <span style={{ fontSize: '10px', color: e.pnlPercent >= 0 ? 'var(--green)' : 'var(--red)' }}>{e.pnlPercent >= 0 ? '+' : ''}{e.pnlPercent.toFixed(1)}%</span>
+              </div>
+            )
+          })}
+          {leaderboard.length === 0 && <div style={{ fontSize: '10px', color: 'rgba(0,255,65,0.3)' }}>No traders yet</div>}
+        </div>
       </div>
 
       <div style={{ padding: '8px 16px', borderTop: '1px solid rgba(0,255,65,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
