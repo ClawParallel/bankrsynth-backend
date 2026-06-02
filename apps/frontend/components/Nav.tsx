@@ -10,6 +10,7 @@ const modules = [
   { href: '/launch',   label: 'LAUNCH',   icon: '◈' },
   { href: '/agent',    label: 'AGENT',    icon: '⬡' },
   { href: '/synth',    label: 'SYNTH',    icon: '◉' },
+  { href: '/arena',    label: 'ARENA',    icon: '⚔' },
   { href: '/repos',    label: 'REPOS',    icon: '⬢' },
   { href: '/swarm',    label: 'SWARM',    icon: '⬟' },
   { href: '/terminal', label: 'TERMINAL', icon: '▶' },

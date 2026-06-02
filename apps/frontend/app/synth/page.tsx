@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import BYOKModal from '@/components/BYOKModal'
 import { loadBYOK, getFreeUsage, recordFreeUsage, FREE_LIMIT } from '@/lib/byok'
 
@@ -48,6 +49,7 @@ function fmtC(n: number): string {
 }
 
 export default function SynthPage() {
+  const router = useRouter()
   const [bucket, setBucket] = useState<Bucket>('trending')
   const [mode, setMode] = useState<Mode>('analyze')
   const [tokens, setTokens] = useState<Token[]>([])
@@ -244,6 +246,16 @@ export default function SynthPage() {
                 {freeRemaining > 0 ? 'add key →' : 'Groq is free →'}
               </button>
             </div>
+          )}
+
+          {/* Share Report button */}
+          {selectedToken && (
+            <button
+              onClick={() => router.push(`/report/${selectedToken.address ?? selectedToken.symbol}`)}
+              style={{ padding: '7px 12px', background: 'transparent', border: '1px solid rgba(0,255,65,0.2)', color: 'rgba(0,255,65,0.5)', fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.15em', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              ↗ FULL REPORT FOR {selectedToken.symbol}
+            </button>
           )}
 
           {/* Synthesize button */}
