@@ -233,7 +233,7 @@ export default function CryptoSphere(_props: { mode?: Mode }) {
       if (wasClick) {
         const s = pickSprite(x, y)
         if (s?.userData?.symbol) {
-          navRef.current.push(`/report/${encodeURIComponent(s.userData.symbol as string)}`)
+          navRef.current.push(`/synth?token=${encodeURIComponent(s.userData.symbol as string)}`)
         }
       }
     }

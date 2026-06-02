@@ -94,6 +94,36 @@ export default function SynthPage() {
 
   useEffect(() => { fetchTokens() }, [fetchTokens])
 
+  // Pre-select a token passed via ?token= (e.g. clicked from the homepage cloud)
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('token')
+    if (!param) return
+    setSearch(param)
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/arena/search?q=${encodeURIComponent(param)}`)
+        const d = (await r.json()) as { tokens?: Array<Partial<Token>> }
+        const t = d.tokens?.[0]
+        if (t && t.symbol) {
+          setSelectedToken({
+            id: t.id ?? `q:${t.symbol}`,
+            symbol: t.symbol,
+            name: t.name ?? t.symbol,
+            address: t.address ?? null,
+            priceUsd: t.priceUsd ?? 0,
+            change24h: t.change24h ?? 0,
+            change1h: t.change1h ?? 0,
+            volume24h: t.volume24h ?? 0,
+            marketCap: t.marketCap ?? 0,
+            liquidity: t.liquidity ?? 0,
+            image: t.image ?? null,
+          })
+          setSearch(t.symbol)
+        }
+      } catch { /* leave search text for manual pick */ }
+    })()
+  }, [])
+
   function onSearch(val: string) {
     setSearch(val)
     if (searchDebounce.current) clearTimeout(searchDebounce.current)
