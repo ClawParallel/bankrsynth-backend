@@ -31,9 +31,5 @@
       "source": "/api/:path*",
       "destination": "https://api.bankrsynth.com/:path*"
     }
-  ],
-
-  "crons": [
-    { "path": "/api/arena/refresh", "schedule": "*/5 * * * *" }
   ]
 }
