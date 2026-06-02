@@ -1,584 +1,331 @@
 'use client'
-import { useEffect, useRef, useState, useCallback } from 'react'
-import BYOKModal from '@/components/BYOKModal'
-import { loadBYOK, recordFreeUsage, FREE_LIMIT } from '@/lib/byok'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useAccount } from 'wagmi'
 
-interface Line {
-  id: number
-  text: string
-  color?: string
-}
-
-type Token = {
+interface Message {
   id: string
-  symbol: string
-  name: string
-  address: string | null
-  priceUsd: number
-  change24h: number
-  change1h: number
-  volume24h: number
-  marketCap: number
-  liquidity: number
+  role: 'user' | 'assistant' | 'thinking'
+  content: string
+  ts: number
 }
 
-let lineId = 0
-function mkLine(text: string, color?: string): Line {
-  return { id: lineId++, text, color }
-}
-
-function fmtP(n: number): string {
-  if (!n || !isFinite(n)) return '$0'
-  if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B'
-  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M'
-  if (n >= 1e3) return '$' + (n / 1e3).toFixed(2) + 'K'
-  if (n >= 1) return '$' + n.toFixed(4)
-  return '$' + n.toPrecision(4)
-}
-
-function fmtC(n: number): string {
-  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%'
-}
-
-const BOOT_LINES = [
-  '> initializing BankrSynth v2.0.0',
-  '> booting synthesis core..............ok',
-  '> connecting to base mainnet...........ok',
-  '> loading token universe...............ok',
-  '> aeon skills layer....................ok',
-  '> miroshark swarm engine...............ok',
-  '> gitlawb connection...................ok',
-  '>',
-  '> BANKRSYNTH ONLINE ●',
-  '> intelligence synthesis layer active',
-  '>',
+const SUGGESTED = [
+  "What's trending on Base right now?",
+  "Analyze AEON for me",
+  "Generate a thesis on VIRTUAL",
+  "What's the global market doing?",
+  "Show whale activity on AEON",
+  "What's BTC dominance today?",
 ]
 
-const SWARM_AGENTS = [
-  { id: 1, name: 'Scan Agent',      status: 'ACTIVE',  role: 'trending_base monitoring · GeckoTerminal' },
-  { id: 2, name: 'Narrative Agent', status: 'ACTIVE',  role: 'narrative_scan · meta detection · Aeon' },
-  { id: 3, name: 'Thesis Agent',    status: 'ACTIVE',  role: 'alpha_generation · long/short picks' },
-  { id: 4, name: 'Sentiment Agent', status: 'ACTIVE',  role: 'LunarCrush v4 · Galaxy Score · social feed' },
-  { id: 5, name: 'Swap Agent',      status: 'STANDBY', role: 'awaiting signal · handoff to BankrBot' },
-  { id: 6, name: 'Monitor Agent',   status: 'ACTIVE',  role: 'on_chain_watch · whale detection · Base' },
-  { id: 7, name: 'Analysis Agent',  status: 'ACTIVE',  role: 'vol/mcap ratio · liquidity depth · on-chain' },
-  { id: 8, name: 'Social Agent',    status: 'ACTIVE',  role: 'X/Twitter · Reddit · Polymarket signals' },
-  { id: 9, name: 'Repos Agent',     status: 'ACTIVE',  role: 'gitlawb health · push notifications' },
-  { id: 10, name: 'Intel Agent',    status: 'ACTIVE',  role: 'macro: BTC dominance · fear/greed · regime' },
-  { id: 11, name: 'Alert Agent',    status: 'ACTIVE',  role: 'threshold alerts · cross-chain signals' },
-  { id: 12, name: 'Swarm Agent',    status: 'ACTIVE',  role: 'orchestration · inter-agent coordination' },
-]
+function mkId() { return Math.random().toString(36).slice(2) }
 
-const HELP_TEXT = [
-  '  status        show uptime + Base network status',
-  '  trending      Base trending pools',
-  '  new           new token launches',
-  '  price [sym]   token price lookup',
-  '  intel         macro market data',
-  '  repos         gitlawb repository status',
-  '  swarm         12-agent roster',
-  '  thesis [SYM]  alpha thesis (requires API key)',
-  '  narrative [SYM] narrative read (requires API key)',
-  '  analyze [SYM] fundamental analysis (requires API key)',
-  '  watch [SYM] --alert [%] poll price every 30s',
-  '  portfolio [ADDR] on-chain portfolio',
-  '  help          show this list',
-  '  clear         clear terminal',
-]
+function TypingText({ text }: { text: string }) {
+  const [displayed, setDisplayed] = useState('')
+  const idxRef = useRef(0)
+
+  useEffect(() => {
+    idxRef.current = 0
+    setDisplayed('')
+    const interval = setInterval(() => {
+      idxRef.current++
+      setDisplayed(text.slice(0, idxRef.current))
+      if (idxRef.current >= text.length) clearInterval(interval)
+    }, 8)
+    return () => clearInterval(interval)
+  }, [text])
+
+  return <span>{displayed}{displayed.length < text.length && <span style={{ animation: 'blink 0.8s infinite' }}>▌</span>}</span>
+}
 
 export default function TerminalPage() {
-  const [lines, setLines] = useState<Line[]>([])
+  const { address, isConnected } = useAccount()
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [history, setHistory] = useState<string[]>([])
-  const [histIdx, setHistIdx] = useState(-1)
-  const [showBYOK, setShowBYOK] = useState(false)
-  const [booted, setBooted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [lastAiId, setLastAiId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const watchRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const histRef = useRef<string[]>([])
+  const histIdxRef = useRef(-1)
 
-  const push = useCallback((...newLines: Line[]) => {
-    setLines((prev) => [...prev, ...newLines])
+  const scrollDown = useCallback(() => {
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 40)
   }, [])
 
-  const scroll = useCallback(() => {
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 30)
-  }, [])
+  useEffect(() => { scrollDown() }, [messages, scrollDown])
 
-  // Boot sequence
+  // Welcome message on mount
   useEffect(() => {
-    let cancelled = false
-    async function boot() {
-      for (const line of BOOT_LINES) {
-        if (cancelled) return
-        await new Promise((r) => setTimeout(r, 55 + Math.random() * 50))
-        setLines((prev) => [...prev, mkLine(line, line.includes('ONLINE') ? 'var(--green)' : undefined)])
-      }
-      setBooted(true)
+    const welcome: Message = {
+      id: mkId(),
+      role: 'assistant',
+      content: `BankrSynth AI Terminal — online.\nBase network · live data · ${new Date().toUTCString()}\n\nAsk me anything: token prices, market analysis, trending tokens, whale activity, portfolio review.\nNo commands needed — just type naturally.`,
+      ts: Date.now(),
     }
-    boot()
-    return () => { cancelled = true }
+    setMessages([welcome])
+    setLastAiId(welcome.id)
   }, [])
 
-  useEffect(() => {
-    if (booted) {
-      runCommand('status')
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [booted])
+  async function sendMessage(text: string) {
+    const trimmed = text.trim()
+    if (!trimmed || loading) return
 
-  useEffect(() => { scroll() }, [lines, scroll])
-
-  async function runCommand(raw: string) {
-    const trimmed = raw.trim()
-    if (!trimmed) return
-    const parts = trimmed.split(/\s+/)
-    const cmd = parts[0].toLowerCase()
-    const args = parts.slice(1)
-
-    if (cmd !== 'clear') {
-      push(mkLine(`> ${trimmed}`, 'rgba(0,255,65,0.5)'))
-    }
-
-    switch (cmd) {
-      case 'clear':
-        setLines([])
-        break
-
-      case 'help':
-        push(mkLine(''), mkLine('AVAILABLE COMMANDS:'), ...HELP_TEXT.map((l) => mkLine(l, 'rgba(0,255,65,0.6)')), mkLine(''))
-        break
-
-      case 'status': {
-        push(mkLine('  fetching status...', 'rgba(0,255,65,0.4)'))
-        try {
-          const r = await fetch('https://mainnet.base.org', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 }),
-          })
-          const d = (await r.json()) as { result?: string }
-          const block = d.result ? parseInt(d.result, 16) : null
-          push(
-            mkLine(''),
-            mkLine('  BANKRSYNTH v2.0.0', 'var(--green)'),
-            mkLine(`  BASE MAINNET: ONLINE`, 'var(--green)'),
-            block ? mkLine(`  BLOCK: #${block.toLocaleString()}`, 'var(--cyan)') : mkLine('  BLOCK: unavailable'),
-            mkLine(`  UPTIME: ${new Date().toUTCString()}`, 'rgba(0,255,65,0.5)'),
-            mkLine('  SYNTHESIS ENGINE: ACTIVE', 'var(--green)'),
-            mkLine(''),
-          )
-        } catch {
-          push(mkLine('  Base RPC unreachable — check network', '#ff4466'))
-        }
-        break
-      }
-
-      case 'trending':
-      case 'new': {
-        const bucket = cmd === 'new' ? 'new_launches' : 'trending'
-        push(mkLine(`  loading ${cmd === 'new' ? 'new launches' : 'trending pools'}...`, 'rgba(0,255,65,0.4)'))
-        try {
-          const r = await fetch(`/api/tokens?bucket=${bucket}`)
-          const d = (await r.json()) as { tokens?: Token[]; error?: string }
-          if (!r.ok || d.error) { push(mkLine(`  error: ${d.error ?? 'failed'}`, '#ff4466')); break }
-          const tokens = d.tokens ?? []
-          if (!tokens.length) { push(mkLine('  no tokens found', 'rgba(0,255,65,0.4)')); break }
-          push(
-            mkLine(''),
-            mkLine(`  ${'SYMBOL'.padEnd(10)} ${'PRICE'.padEnd(14)} ${'24H'.padEnd(10)} ${'VOLUME'.padEnd(14)} MCAP`, 'rgba(0,255,65,0.4)'),
-            mkLine('  ' + '─'.repeat(64), 'rgba(0,255,65,0.15)'),
-          )
-          tokens.slice(0, 20).forEach((t) => {
-            const chg = fmtC(t.change24h)
-            const color = t.change24h >= 0 ? 'var(--green)' : 'var(--red)'
-            push(mkLine(`  ${t.symbol.padEnd(10)} ${fmtP(t.priceUsd).padEnd(14)} ${chg.padEnd(10)} ${fmtP(t.volume24h).padEnd(14)} ${fmtP(t.marketCap)}`, color))
-          })
-          push(mkLine(''))
-        } catch {
-          push(mkLine('  GeckoTerminal unavailable', '#ff4466'))
-        }
-        break
-      }
-
-      case 'intel': {
-        push(mkLine('  fetching market data...', 'rgba(0,255,65,0.4)'))
-        try {
-          const r = await fetch('/api/intel')
-          const d = (await r.json()) as {
-            global?: { totalMcap?: number; vol24h?: number; btcDominance?: number; ethDominance?: number; mcapChange24h?: number; activeCryptos?: number }
-            trending?: Array<{ symbol?: string; name?: string; marketCapRank?: number }>
-            basePools?: Array<{ symbol?: string; price?: number; change24h?: number; volume24h?: number }>
-            error?: string
-          }
-          if (d.error) { push(mkLine(`  error: ${d.error}`, '#ff4466')); break }
-          const g = d.global
-          if (g) {
-            push(
-              mkLine(''),
-              mkLine('  GLOBAL MARKET', 'var(--cyan)'),
-              mkLine(`  Total MCap:    ${g.totalMcap ? fmtP(g.totalMcap) : 'n/a'}`),
-              mkLine(`  24h Volume:    ${g.vol24h ? fmtP(g.vol24h) : 'n/a'}`),
-              mkLine(`  BTC Dom:       ${g.btcDominance?.toFixed(1) ?? 'n/a'}%`),
-              mkLine(`  ETH Dom:       ${g.ethDominance?.toFixed(1) ?? 'n/a'}%`),
-              mkLine(`  MCap 24h chg:  ${g.mcapChange24h ? fmtC(g.mcapChange24h) : 'n/a'}`),
-            )
-          }
-          if (d.trending?.length) {
-            push(mkLine(''), mkLine('  COINGECKO TRENDING', 'var(--cyan)'))
-            d.trending.slice(0, 8).forEach((t, i) => {
-              push(mkLine(`  ${(i + 1).toString().padStart(2)}. ${(t.symbol ?? '?').padEnd(12)} ${t.name ?? ''}`, 'rgba(0,255,65,0.7)'))
-            })
-          }
-          if (d.basePools?.length) {
-            push(mkLine(''), mkLine('  BASE TRENDING POOLS', 'var(--cyan)'))
-            d.basePools.slice(0, 8).forEach((p) => {
-              const chg = p.change24h !== undefined ? fmtC(p.change24h) : ''
-              const color = (p.change24h ?? 0) >= 0 ? 'var(--green)' : 'var(--red)'
-              push(mkLine(`  ${(p.symbol ?? '?').padEnd(12)} ${fmtP(p.price ?? 0).padEnd(14)} ${chg}`, color))
-            })
-          }
-          push(mkLine(''))
-        } catch {
-          push(mkLine('  intel API unavailable', '#ff4466'))
-        }
-        break
-      }
-
-      case 'price': {
-        const sym = args[0]?.toUpperCase()
-        if (!sym) { push(mkLine('  usage: price [SYMBOL]', '#ff4466')); break }
-        push(mkLine(`  looking up ${sym}...`, 'rgba(0,255,65,0.4)'))
-        try {
-          const r = await fetch('/api/tokens?bucket=trending')
-          const d = (await r.json()) as { tokens?: Token[] }
-          const token = d.tokens?.find((t) => t.symbol.toUpperCase() === sym)
-          if (token) {
-            const color = token.change24h >= 0 ? 'var(--green)' : 'var(--red)'
-            push(
-              mkLine(''),
-              mkLine(`  ${token.symbol} — ${token.name}`, 'var(--cyan)'),
-              mkLine(`  Price:     ${fmtP(token.priceUsd)}`, color),
-              mkLine(`  24h:       ${fmtC(token.change24h)}`, color),
-              mkLine(`  1h:        ${fmtC(token.change1h)}`, color),
-              mkLine(`  Volume:    ${fmtP(token.volume24h)}`),
-              mkLine(`  MCap:      ${fmtP(token.marketCap)}`),
-              mkLine(`  Liquidity: ${fmtP(token.liquidity)}`),
-              mkLine(''),
-            )
-          } else {
-            push(mkLine(`  ${sym} not found in trending. Try 'trending' to see available tokens.`, 'rgba(0,255,65,0.4)'))
-          }
-        } catch {
-          push(mkLine('  price lookup failed', '#ff4466'))
-        }
-        break
-      }
-
-      case 'repos': {
-        push(mkLine('  connecting to gitlawb...', 'rgba(0,255,65,0.4)'))
-        try {
-          const r = await fetch('/api/repos')
-          const d = (await r.json()) as {
-            did?: string
-            repos?: Array<{ name: string; objects?: number; nodes?: number; storage?: string; signature?: string; url?: string; live?: boolean }>
-            nodeStatus?: { online: number; total: number; locations?: string[] }
-            source?: string
-          }
-          push(
-            mkLine(''),
-            mkLine('  GITLAWB STATUS', 'var(--cyan)'),
-            mkLine(`  DID: ${d.did?.slice(0, 40) ?? 'n/a'}...`, 'rgba(0,200,255,0.7)'),
-            mkLine(`  Source: ${d.source?.toUpperCase() ?? 'UNKNOWN'}`, d.source === 'live' ? 'var(--green)' : 'var(--gold)'),
-          )
-          if (d.nodeStatus) {
-            push(mkLine(`  Nodes: ${d.nodeStatus.online}/${d.nodeStatus.total} online | ${d.nodeStatus.locations?.join(', ') ?? ''}`, 'var(--green)'))
-          }
-          if (d.repos?.length) {
-            push(mkLine(''), mkLine('  REPOSITORIES:', 'var(--cyan)'))
-            d.repos.forEach((repo) => {
-              push(
-                mkLine(`  ◈ ${repo.name}`, 'var(--green)'),
-                mkLine(`    objects: ${repo.objects ?? 'n/a'} · nodes: ${repo.nodes ?? 'n/a'} · ${repo.storage ?? ''} · ${repo.signature ?? ''}`),
-                mkLine(`    ${repo.url ?? ''}`, 'rgba(0,200,255,0.5)'),
-              )
-            })
-          }
-          push(mkLine(''))
-        } catch {
-          push(mkLine('  gitlawb unavailable', '#ff4466'))
-        }
-        break
-      }
-
-      case 'swarm': {
-        push(mkLine(''), mkLine('  MIROSHARK SWARM — 12 AGENTS', 'var(--cyan)'))
-        SWARM_AGENTS.forEach((a) => {
-          const color = a.status === 'ACTIVE' ? 'var(--green)' : 'var(--gold)'
-          push(mkLine(`  [${a.status}] ${a.name.padEnd(18)} ${a.role}`, color))
-        })
-        push(mkLine(''))
-        break
-      }
-
-      case 'thesis':
-      case 'narrative':
-      case 'analyze': {
-        const sym = args[0]?.toUpperCase()
-        if (!sym) { push(mkLine(`  usage: ${cmd} [SYMBOL]`, '#ff4466')); break }
-
-        const config = loadBYOK()
-
-        push(mkLine(`  finding ${sym}...`, 'rgba(0,255,65,0.4)'))
-        try {
-          const r = await fetch('/api/tokens?bucket=trending')
-          const d = (await r.json()) as { tokens?: Token[] }
-          let token = d.tokens?.find((t) => t.symbol.toUpperCase() === sym)
-
-          if (!token) {
-            const r2 = await fetch('/api/tokens?bucket=high_volume')
-            const d2 = (await r2.json()) as { tokens?: Token[] }
-            token = d2.tokens?.find((t) => t.symbol.toUpperCase() === sym)
-          }
-
-          if (!token) {
-            push(mkLine(`  ${sym} not found — try 'trending' to see available tokens`, '#ff4466'))
-            break
-          }
-
-          const via = config ? `${config.provider}/${config.model}` : 'BankrSynth (free)'
-          push(mkLine(`  synthesizing ${cmd} for ${sym} via ${via}...`, 'rgba(0,255,65,0.4)'))
-
-          const reqHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-          if (config) {
-            reqHeaders['X-API-Key'] = config.apiKey
-            reqHeaders['X-Provider'] = config.provider
-            reqHeaders['X-Model'] = config.model
-          }
-
-          const sr = await fetch('/api/synth', {
-            method: 'POST',
-            headers: reqHeaders,
-            body: JSON.stringify({
-              mode: cmd,
-              tokenSymbol: token.symbol,
-              tokenName: token.name,
-              priceUsd: token.priceUsd,
-              change24h: token.change24h,
-              change1h: token.change1h,
-              volume24h: token.volume24h,
-              marketCap: token.marketCap,
-              liquidity: token.liquidity,
-              chain: 'base',
-              address: token.address,
-            }),
-          })
-
-          const sd = (await sr.json()) as {
-            analysis?: string; error?: string; provider?: string; model?: string
-            isFallback?: boolean; remaining?: number; byokPrompt?: boolean
-          }
-
-          if (sr.status === 429) {
-            push(mkLine(`  ${sd.error ?? `free limit reached (${FREE_LIMIT}/day)`}`, '#ff4466'))
-            push(mkLine('  opening API key settings — Groq is free ↗', 'rgba(255,165,0,0.7)'))
-            setShowBYOK(true)
-            break
-          }
-
-          if (sr.status === 401) {
-            if (sd.byokPrompt) {
-              push(mkLine('  no API key and no free synthesis configured — opening settings...', '#ff4466'))
-            } else {
-              push(mkLine('  invalid API key — opening settings...', '#ff4466'))
-            }
-            setShowBYOK(true)
-            break
-          }
-
-          if (!sr.ok || sd.error) {
-            push(mkLine(`  synthesis failed: ${sd.error ?? 'unknown error'}`, '#ff4466'))
-            break
-          }
-
-          push(mkLine(''), mkLine(`  [${cmd.toUpperCase()} — ${sym}]`, 'var(--cyan)'))
-
-          // Typewriter
-          const text = sd.analysis ?? ''
-          const lines_ = text.split('\n')
-          for (const line of lines_) {
-            await new Promise<void>((resolve) => {
-              const id = lineId++
-              let i = 0
-              setLines((prev) => [...prev, { id, text: '', color: 'rgba(0,255,65,0.9)' }])
-              const t = setInterval(() => {
-                i++
-                setLines((prev) =>
-                  prev.map((l) => (l.id === id ? { ...l, text: `  ${line.slice(0, i)}` } : l)),
-                )
-                if (i >= line.length) { clearInterval(t); resolve() }
-              }, 15)
-            })
-          }
-
-          if (sd.isFallback) {
-            recordFreeUsage(sd.remaining)
-            push(mkLine(`  via BankrSynth · free (${sd.remaining ?? 0} remaining today)`, 'rgba(0,255,65,0.3)'))
-          } else {
-            push(mkLine(`  via ${sd.provider ?? config?.provider}/${sd.model ?? config?.model} · your key`, 'rgba(0,255,65,0.3)'))
-          }
-          push(mkLine(''))
-        } catch {
-          push(mkLine('  synthesis request failed', '#ff4466'))
-        }
-        break
-      }
-
-      case 'watch': {
-        const sym = args[0]?.toUpperCase()
-        const alertIdx = args.indexOf('--alert')
-        const threshold = alertIdx >= 0 ? parseFloat(args[alertIdx + 1] ?? '5') : 5
-
-        if (!sym) { push(mkLine('  usage: watch [SYMBOL] --alert [%]', '#ff4466')); break }
-        if (watchRef.current) { clearInterval(watchRef.current); push(mkLine('  stopped previous watch', 'rgba(0,255,65,0.4)')) }
-
-        push(mkLine(`  watching ${sym} · alert at ±${threshold}% · Ctrl+C or "clear" to stop`, 'rgba(0,255,65,0.6)'))
-        let lastPrice: number | null = null
-
-        const poll = async () => {
-          try {
-            const r = await fetch('/api/tokens?bucket=trending')
-            const d = (await r.json()) as { tokens?: Token[] }
-            const token = d.tokens?.find((t) => t.symbol.toUpperCase() === sym)
-            if (!token) return
-            const chg = lastPrice ? ((token.priceUsd - lastPrice) / lastPrice) * 100 : 0
-            if (lastPrice && Math.abs(chg) >= threshold) {
-              push(mkLine(`  🔔 ALERT: ${sym} ${fmtC(chg)} → ${fmtP(token.priceUsd)}`, chg >= 0 ? 'var(--green)' : 'var(--red)'))
-            } else {
-              push(mkLine(`  ${new Date().toLocaleTimeString()} ${sym}: ${fmtP(token.priceUsd)} (${fmtC(token.change24h)})`, 'rgba(0,255,65,0.5)'))
-            }
-            lastPrice = token.priceUsd
-          } catch {
-            push(mkLine('  watch: fetch failed', '#ff4466'))
-          }
-        }
-        await poll()
-        watchRef.current = setInterval(poll, 30000)
-        break
-      }
-
-      case 'portfolio': {
-        const addr = args[0]
-        if (!addr) { push(mkLine('  usage: portfolio [ADDRESS]', '#ff4466')); break }
-        push(mkLine(`  fetching portfolio for ${addr.slice(0, 8)}...`, 'rgba(0,255,65,0.4)'))
-        try {
-          const r = await fetch(`https://base.blockscout.com/api/v2/addresses/${addr}/token-balances`)
-          if (!r.ok) throw new Error(`Blockscout ${r.status}`)
-          const d = (await r.json()) as Array<{ token?: { symbol?: string; name?: string }; value?: string; token_instance?: null }>
-          const balances = d.filter((b) => !b.token_instance).slice(0, 20)
-          if (!balances.length) { push(mkLine('  no token balances found', 'rgba(0,255,65,0.4)')); break }
-          push(mkLine(''), mkLine('  PORTFOLIO BALANCES', 'var(--cyan)'))
-          balances.forEach((b) => {
-            const sym = b.token?.symbol ?? '?'
-            const raw = parseFloat(b.value ?? '0')
-            push(mkLine(`  ${sym.padEnd(12)} ${raw > 0 ? raw.toExponential(4) : '0'}`, 'rgba(0,255,65,0.7)'))
-          })
-          push(mkLine(''))
-        } catch {
-          push(mkLine('  Blockscout unavailable — check address format', '#ff4466'))
-        }
-        break
-      }
-
-      default:
-        push(mkLine(`  unknown command: ${cmd}. Type 'help' for available commands.`, '#ff4466'))
-    }
-    scroll()
-  }
-
-  function submit() {
-    const trimmed = input.trim()
-    if (!trimmed) return
-    setHistory((prev) => [trimmed, ...prev].slice(0, 100))
-    setHistIdx(-1)
+    histRef.current = [trimmed, ...histRef.current].slice(0, 100)
+    histIdxRef.current = -1
     setInput('')
-    runCommand(trimmed)
+
+    const userMsg: Message = { id: mkId(), role: 'user', content: trimmed, ts: Date.now() }
+    const thinkingMsg: Message = { id: mkId(), role: 'thinking', content: '', ts: Date.now() }
+
+    setMessages(prev => [...prev, userMsg, thinkingMsg])
+    setLoading(true)
+
+    // Build conversation history for API (only user/assistant, not thinking)
+    const apiMessages = [...messages, userMsg]
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+
+    try {
+      const r = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: apiMessages,
+          walletAddress: isConnected ? address : undefined,
+        }),
+      })
+
+      const data = await r.json() as { response?: string; error?: string }
+
+      if (!r.ok || data.error) {
+        const errMsg: Message = {
+          id: mkId(),
+          role: 'assistant',
+          content: data.error ?? 'Something went wrong. Try again.',
+          ts: Date.now(),
+        }
+        setMessages(prev => prev.filter(m => m.role !== 'thinking').concat(errMsg))
+        setLastAiId(errMsg.id)
+      } else {
+        const aiMsg: Message = {
+          id: mkId(),
+          role: 'assistant',
+          content: data.response ?? '',
+          ts: Date.now(),
+        }
+        setMessages(prev => prev.filter(m => m.role !== 'thinking').concat(aiMsg))
+        setLastAiId(aiMsg.id)
+      }
+    } catch {
+      const errMsg: Message = {
+        id: mkId(),
+        role: 'assistant',
+        content: 'Network error — check connection and try again.',
+        ts: Date.now(),
+      }
+      setMessages(prev => prev.filter(m => m.role !== 'thinking').concat(errMsg))
+      setLastAiId(errMsg.id)
+    }
+
+    setLoading(false)
+    setTimeout(() => inputRef.current?.focus(), 50)
   }
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter') { submit(); return }
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); return }
     if (e.key === 'ArrowUp') {
       e.preventDefault()
-      const next = Math.min(histIdx + 1, history.length - 1)
-      setHistIdx(next)
-      setInput(history[next] ?? '')
-      return
+      const next = Math.min(histIdxRef.current + 1, histRef.current.length - 1)
+      histIdxRef.current = next
+      setInput(histRef.current[next] ?? '')
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      const next = Math.max(histIdx - 1, -1)
-      setHistIdx(next)
-      setInput(next === -1 ? '' : history[next] ?? '')
-      return
-    }
-    if (e.key === 'Tab') {
-      e.preventDefault()
-      const cmds = ['status', 'trending', 'new', 'price', 'intel', 'repos', 'swarm', 'thesis', 'narrative', 'analyze', 'watch', 'portfolio', 'help', 'clear']
-      const match = cmds.find((c) => c.startsWith(input.toLowerCase()))
-      if (match) setInput(match)
+      const next = Math.max(histIdxRef.current - 1, -1)
+      histIdxRef.current = next
+      setInput(next === -1 ? '' : histRef.current[next] ?? '')
     }
   }
+
+  const isEmpty = messages.filter(m => m.role !== 'assistant' || messages.indexOf(m) > 0).filter(m => m.role === 'user').length === 0
 
   return (
     <main
       style={{ height: '100dvh', paddingTop: 'clamp(52px,8vw,56px)', display: 'flex', flexDirection: 'column', background: '#000', cursor: 'text' }}
       onClick={() => inputRef.current?.focus()}
     >
-      <div style={{ padding: '8px 16px', borderBottom: '1px solid rgba(0,255,65,0.1)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* Header */}
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid rgba(0,255,65,0.1)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
         <div>
           <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.3em' }}>BANKRSYNTH://</span>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(13px,2vw,18px)', fontWeight: 700, letterSpacing: '0.2em', color: 'var(--green)', textShadow: '0 0 20px rgba(0,255,65,0.4)' }}>
-            ▶ TERMINAL
+            ▶ AI TERMINAL
           </h1>
         </div>
-        <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.3)' }}>type &apos;help&apos; · tab autocomplete · ↑↓ history</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {isConnected && address && (
+            <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.4)', fontFamily: 'var(--font-mono)' }}>
+              <span style={{ color: 'var(--green)' }}>●</span> {address.slice(0, 6)}...{address.slice(-4)}
+            </span>
+          )}
+          <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.25)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 6px var(--green)', display: 'inline-block', animation: 'pulse 2s infinite' }} />
+            LIVE
+          </span>
+        </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: '12px', lineHeight: 1.7 }}>
-        {lines.map((l) => (
-          <div key={l.id} style={{ color: l.color ?? 'rgba(0,255,65,0.8)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-            {l.text}
+      {/* Chat area */}
+      <div
+        style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+      >
+        {messages.map((msg, idx) => {
+          if (msg.role === 'thinking') {
+            return (
+              <div key={msg.id} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(0,255,65,0.08)', border: '1px solid rgba(0,255,65,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span style={{ fontSize: '10px', color: 'var(--green)' }}>◉</span>
+                </div>
+                <div style={{ padding: '8px 12px', background: 'rgba(0,8,2,0.8)', border: '1px solid rgba(0,255,65,0.15)', fontSize: '11px', color: 'rgba(0,255,65,0.5)', fontFamily: 'var(--font-mono)' }}>
+                  fetching live data<span style={{ animation: 'blink 0.6s step-end infinite' }}>...</span>
+                </div>
+              </div>
+            )
+          }
+
+          if (msg.role === 'user') {
+            return (
+              <div key={msg.id} style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{
+                  maxWidth: '75%',
+                  padding: '10px 14px',
+                  background: 'rgba(0,255,65,0.07)',
+                  border: '1px solid rgba(0,255,65,0.25)',
+                  fontSize: '12px',
+                  color: 'rgba(0,255,65,0.9)',
+                  fontFamily: 'var(--font-mono)',
+                  lineHeight: 1.5,
+                  wordBreak: 'break-word',
+                }}>
+                  {msg.content}
+                </div>
+              </div>
+            )
+          }
+
+          // assistant
+          const isLatestAi = msg.id === lastAiId
+          return (
+            <div key={msg.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'rgba(0,255,65,0.08)', border: '1px solid rgba(0,255,65,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px' }}>
+                <span style={{ fontSize: '10px', color: 'var(--green)' }}>◉</span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.15em', marginBottom: '5px', fontFamily: 'var(--font-display)' }}>BANKRSYNTH</div>
+                <div style={{
+                  padding: '10px 14px',
+                  background: 'rgba(0,6,2,0.85)',
+                  border: '1px solid rgba(0,255,65,0.12)',
+                  fontSize: '12px',
+                  color: 'rgba(0,255,65,0.85)',
+                  fontFamily: 'var(--font-mono)',
+                  lineHeight: 1.7,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}>
+                  {isLatestAi && idx === messages.length - 1
+                    ? <TypingText text={msg.content} />
+                    : msg.content}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+
+        {/* Suggested prompts — shown after welcome when no user messages sent */}
+        {isEmpty && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', paddingLeft: '38px' }}>
+            {SUGGESTED.map((s, i) => {
+              if (i === 3 && !isConnected) return null
+              return (
+                <button
+                  key={s}
+                  onClick={() => sendMessage(s)}
+                  style={{
+                    padding: '6px 12px',
+                    background: 'transparent',
+                    border: '1px solid rgba(0,255,65,0.2)',
+                    color: 'rgba(0,255,65,0.55)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '10px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    letterSpacing: '0.05em',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(0,255,65,0.5)'; e.currentTarget.style.color = 'var(--green)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(0,255,65,0.2)'; e.currentTarget.style.color = 'rgba(0,255,65,0.55)' }}
+                >
+                  {s}
+                </button>
+              )
+            })}
+            {isConnected && (
+              <button
+                onClick={() => sendMessage(`Show my portfolio for ${address}`)}
+                style={{ padding: '6px 12px', background: 'transparent', border: '1px solid rgba(0,255,65,0.2)', color: 'rgba(0,255,65,0.55)', fontFamily: 'var(--font-mono)', fontSize: '10px', cursor: 'pointer', letterSpacing: '0.05em' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(0,255,65,0.5)'; e.currentTarget.style.color = 'var(--green)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(0,255,65,0.2)'; e.currentTarget.style.color = 'rgba(0,255,65,0.55)' }}
+              >
+                Show my portfolio
+              </button>
+            )}
           </div>
-        ))}
+        )}
+
         <div ref={bottomRef} />
       </div>
 
-      <div style={{ borderTop: '1px solid rgba(0,255,65,0.12)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-        <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: '14px', flexShrink: 0 }}>▸</span>
+      {/* Input bar */}
+      <div
+        style={{ borderTop: '1px solid rgba(0,255,65,0.12)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, background: 'rgba(0,2,0,0.9)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <span style={{ color: loading ? 'rgba(0,255,65,0.35)' : 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: '14px', flexShrink: 0 }}>
+          {loading ? '◌' : '▸'}
+        </span>
         <input
           ref={inputRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={e => setInput(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="enter command..."
+          placeholder={loading ? 'thinking...' : 'Ask about any token, market, or portfolio...'}
+          disabled={loading}
           style={{
             flex: 1, background: 'none', border: 'none', outline: 'none',
             color: 'var(--green)', fontFamily: 'var(--font-mono)', fontSize: '13px',
             caretColor: 'var(--green)',
+            opacity: loading ? 0.4 : 1,
           }}
           autoFocus
           autoComplete="off"
           spellCheck={false}
         />
         <button
-          onClick={submit}
-          style={{ background: 'none', border: '1px solid rgba(0,255,65,0.2)', color: 'rgba(0,255,65,0.5)', fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.15em', padding: '5px 10px', cursor: 'pointer' }}
+          onClick={() => sendMessage(input)}
+          disabled={loading || !input.trim()}
+          style={{
+            background: input.trim() && !loading ? 'rgba(0,255,65,0.08)' : 'transparent',
+            border: `1px solid ${input.trim() && !loading ? 'rgba(0,255,65,0.4)' : 'rgba(0,255,65,0.12)'}`,
+            color: input.trim() && !loading ? 'var(--green)' : 'rgba(0,255,65,0.25)',
+            fontFamily: 'var(--font-mono)', fontSize: '9px', letterSpacing: '0.15em',
+            padding: '7px 12px', cursor: input.trim() && !loading ? 'pointer' : 'default',
+            transition: 'all 0.15s', flexShrink: 0,
+          }}
         >
-          RUN
+          SEND ↵
         </button>
       </div>
-
-      {showBYOK && <BYOKModal onClose={() => setShowBYOK(false)} />}
     </main>
   )
 }
