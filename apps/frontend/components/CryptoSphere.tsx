@@ -339,8 +339,13 @@ export default function CryptoSphere(_props: { mode?: Mode }) {
 
   return (
     <>
-      {/* Base black */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none', background: '#000000' }} />
+      {/* Lifted dark-green base glow (brighter than flat black) */}
+      <div
+        style={{
+          position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
+          background: 'radial-gradient(ellipse at 50% 45%, #0c2418 0%, #06160d 50%, #020a06 100%)',
+        }}
+      />
 
       {/* Drifting aurora nebula */}
       <div className="viz-aurora" aria-hidden>
@@ -354,15 +359,15 @@ export default function CryptoSphere(_props: { mode?: Mode }) {
         style={{
           position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
           backgroundImage:
-            'linear-gradient(rgba(0,255,65,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,65,0.05) 1px, transparent 1px)',
+            'linear-gradient(rgba(0,255,65,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,65,0.07) 1px, transparent 1px)',
           backgroundSize: '44px 44px',
         }}
       />
-      {/* Radial vignette for depth */}
+      {/* Soft vignette for depth (lighter) */}
       <div
         style={{
           position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
-          background: 'radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,0.82) 100%)',
+          background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.55) 100%)',
         }}
       />
       <canvas
