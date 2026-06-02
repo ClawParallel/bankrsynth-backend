@@ -1,25 +1,32 @@
 'use client'
 import { WagmiProvider, createConfig, http } from 'wagmi'
 import { base, mainnet, optimism, arbitrum, polygon, bsc } from 'wagmi/chains'
-import { injected, coinbaseWallet, walletConnect } from 'wagmi/connectors'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
+import { RainbowKitProvider, darkTheme, connectorsForWallets } from '@rainbow-me/rainbowkit'
+import {
+  metaMaskWallet, coinbaseWallet, injectedWallet,
+  walletConnectWallet, rainbowWallet, trustWallet,
+} from '@rainbow-me/rainbowkit/wallets'
 import { useState } from 'react'
 import '@rainbow-me/rainbowkit/styles.css'
+import WalletAuthGate from './WalletAuthGate'
 
-const wcProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
+// WalletConnect-based wallets (Rainbow, Trust, the WC QR option) require a free
+// projectId from cloud.reown.com. MetaMask + Coinbase + injected work without it.
+const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || ''
+const hasWc = projectId.length > 0
 
-// MetaMask + any injected wallet, Coinbase Wallet, and WalletConnect (if projectId set).
-// Defaults to Base but supports all major EVM chains.
-const connectors = [
-  injected(),
-  coinbaseWallet({ appName: 'SynthTerminal' }),
-  ...(wcProjectId ? [walletConnect({ projectId: wcProjectId })] : []),
-]
+const connectors = connectorsForWallets(
+  [
+    { groupName: 'Popular', wallets: [metaMaskWallet, coinbaseWallet, injectedWallet] },
+    ...(hasWc ? [{ groupName: 'More', wallets: [walletConnectWallet, rainbowWallet, trustWallet] }] : []),
+  ],
+  { appName: 'SynthTerminal', projectId: projectId || 'synthterminal' },
+)
 
 const config = createConfig({
-  chains: [base, mainnet, optimism, arbitrum, polygon, bsc],
   connectors,
+  chains: [base, mainnet, optimism, arbitrum, polygon, bsc],
   transports: {
     [base.id]:     http('https://mainnet.base.org'),
     [mainnet.id]:  http(),
@@ -28,6 +35,7 @@ const config = createConfig({
     [polygon.id]:  http(),
     [bsc.id]:      http(),
   },
+  ssr: true,
 })
 
 export default function WalletProvider({ children }: { children: React.ReactNode }) {
@@ -44,6 +52,7 @@ export default function WalletProvider({ children }: { children: React.ReactNode
           })}
         >
           {children}
+          <WalletAuthGate />
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
