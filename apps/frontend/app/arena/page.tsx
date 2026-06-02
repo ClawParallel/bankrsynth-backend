@@ -92,6 +92,8 @@ export default function ArenaPage() {
   const [tokens, setTokens] = useState<Token[]>([])
   const [search, setSearch] = useState('')
   const [showDropdown, setShowDropdown] = useState(false)
+  const [remoteResults, setRemoteResults] = useState<Token[]>([])
+  const [searching, setSearching] = useState(false)
   const [selected, setSelected] = useState<Token | null>(null)
   const [selectedDecimals, setSelectedDecimals] = useState(18)
   const [side, setSide] = useState<Side>('buy')
@@ -114,6 +116,7 @@ export default function ArenaPage() {
 
   const searchRef = useRef<HTMLDivElement>(null)
   const quoteDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Token universe for search
   useEffect(() => {
@@ -362,9 +365,42 @@ export default function ArenaPage() {
     document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
   }, [])
 
-  const searchResults = search.trim()
-    ? tokens.filter(t => t.symbol.toLowerCase().includes(search.toLowerCase()) || t.name.toLowerCase().includes(search.toLowerCase())).slice(0, 8)
+  // Live token search (DexScreener + GeckoTerminal) — finds ANY Base token, incl. pasted addresses
+  useEffect(() => {
+    const q = search.trim()
+    setRemoteResults([])
+    if (searchDebounce.current) clearTimeout(searchDebounce.current)
+    if (q.length < 2 || (selected && q === selected.symbol)) { setSearching(false); return }
+    setSearching(true)
+    searchDebounce.current = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/arena/search?q=${encodeURIComponent(q)}`)
+        const d = (await r.json()) as { tokens?: Token[] }
+        setRemoteResults(d.tokens ?? [])
+      } catch {
+        setRemoteResults([])
+      }
+      setSearching(false)
+    }, 350)
+  }, [search, selected])
+
+  const localMatches = search.trim()
+    ? tokens.filter(t => t.symbol.toLowerCase().includes(search.toLowerCase()) || t.name.toLowerCase().includes(search.toLowerCase()))
     : []
+
+  // Merge local + remote, dedup by address, local first
+  const searchResults: Token[] = (() => {
+    if (!search.trim()) return []
+    const seen = new Set<string>()
+    const merged: Token[] = []
+    for (const t of [...localMatches, ...remoteResults]) {
+      const key = (t.address ?? t.id).toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      merged.push(t)
+    }
+    return merged.slice(0, 12)
+  })()
 
   const ethAmount = ethBal ? Number(formatUnits(ethBal.value, ethBal.decimals)) : 0
   const ethValue = ethAmount * ethPrice
@@ -451,15 +487,21 @@ export default function ArenaPage() {
             {/* Token search */}
             <div ref={searchRef} style={{ position: 'relative' }}>
               <label style={{ display: 'block', fontSize: '9px', letterSpacing: '0.2em', color: 'rgba(0,255,65,0.45)', marginBottom: '4px' }}>TOKEN</label>
-              <input value={search} onChange={e => { setSearch(e.target.value); setShowDropdown(true) }} onFocus={() => setShowDropdown(true)} placeholder="Search Base token..." className="terminal-input" autoComplete="off" />
-              {showDropdown && searchResults.length > 0 && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'rgba(0,8,2,0.98)', border: '1px solid rgba(0,255,65,0.3)', zIndex: 10, maxHeight: '280px', overflowY: 'auto' }}>
+              <input value={search} onChange={e => { setSearch(e.target.value); setShowDropdown(true) }} onFocus={() => setShowDropdown(true)} placeholder="Search symbol or paste contract address (0x...)" className="terminal-input" autoComplete="off" />
+              {showDropdown && search.trim().length >= 2 && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'rgba(0,8,2,0.98)', border: '1px solid rgba(0,255,65,0.3)', zIndex: 10, maxHeight: '300px', overflowY: 'auto' }}>
                   {searchResults.map(t => (
-                    <button key={t.id} onClick={() => { setSelected(t); setSearch(t.symbol); setShowDropdown(false); setStatus('idle'); setStatusMsg('') }} style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(0,255,65,0.05)', padding: '8px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left' }}>
-                      <div><div style={{ fontSize: '11px', color: 'var(--green)', fontWeight: 700 }}>{t.symbol}</div><div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.4)' }}>{t.name}</div></div>
-                      <div style={{ textAlign: 'right' }}><div style={{ fontSize: '10px', color: 'rgba(0,255,65,0.8)' }}>{fmtUsd(t.priceUsd)}</div><div style={{ fontSize: '9px', color: t.change24h >= 0 ? 'var(--green)' : 'var(--red)' }}>{t.change24h >= 0 ? '+' : ''}{t.change24h.toFixed(2)}%</div></div>
+                    <button key={t.id} onClick={() => { setSelected(t); setSearch(t.symbol); setShowDropdown(false); setRemoteResults([]); setStatus('idle'); setStatusMsg('') }} style={{ width: '100%', background: 'transparent', border: 'none', borderBottom: '1px solid rgba(0,255,65,0.05)', padding: '8px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left' }}>
+                      <div style={{ minWidth: 0 }}><div style={{ fontSize: '11px', color: 'var(--green)', fontWeight: 700 }}>{t.symbol}</div><div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div></div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}><div style={{ fontSize: '10px', color: 'rgba(0,255,65,0.8)' }}>{fmtUsd(t.priceUsd)}</div><div style={{ fontSize: '9px', color: t.change24h >= 0 ? 'var(--green)' : 'var(--red)' }}>{t.change24h >= 0 ? '+' : ''}{t.change24h.toFixed(2)}%</div></div>
                     </button>
                   ))}
+                  {searching && searchResults.length === 0 && (
+                    <div style={{ padding: '10px', fontSize: '10px', color: 'rgba(0,255,65,0.4)' }}>searching DexScreener + GeckoTerminal<span style={{ animation: 'blink 0.7s step-end infinite' }}>...</span></div>
+                  )}
+                  {!searching && searchResults.length === 0 && (
+                    <div style={{ padding: '10px', fontSize: '10px', color: 'rgba(0,255,65,0.35)' }}>No Base token found for &quot;{search.trim()}&quot;</div>
+                  )}
                 </div>
               )}
             </div>

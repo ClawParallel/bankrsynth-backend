@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { kv_get, kv_set } from '@/lib/redis'
 
+// Public, global leaderboard — always read live from Redis, never cached.
+export const dynamic = 'force-dynamic'
+
 // Real-wallet leaderboard. Each trader's value comes from their actual Base
 // holdings (computed client-side from Blockscout + GeckoTerminal and posted here).
 // P&L% is measured against a baseline snapshot that resets weekly/monthly.
