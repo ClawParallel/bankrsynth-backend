@@ -1,9 +1,39 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useAccount, useConnect } from 'wagmi'
-import { injected } from 'wagmi/connectors'
+import { useAccount } from 'wagmi'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
 import Link from 'next/link'
-import type { Portfolio, TradeRecord, LeaderboardEntry } from '@/lib/arena-store'
+
+interface Portfolio {
+  wallet: string
+  usdc: number
+  holdings: Record<string, { balance: number; avgPrice: number; address: string }>
+  startValue: number
+  joinedAt: number
+  trades: number
+  currentValue?: number
+}
+
+interface TradeRecord {
+  id: string
+  tokenSymbol: string
+  tradeType: 'buy' | 'sell'
+  usdcAmount: number
+  price: number
+  tokensAmount: number
+  timestamp: number
+}
+
+interface LeaderboardEntry {
+  wallet: string
+  displayName: string
+  currentValue: number
+  startValue: number
+  pnlPercent: number
+  pnlUsd: number
+  trades: number
+  rank: number
+}
 
 interface Token {
   id: string
@@ -69,7 +99,7 @@ function ts(ms: number): string {
 
 export default function ArenaPage() {
   const { address, isConnected } = useAccount()
-  const { connect, isPending: connectPending } = useConnect()
+  const { openConnectModal } = useConnectModal()
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [portfolioLoading, setPortfolioLoading] = useState(false)
@@ -236,7 +266,7 @@ export default function ArenaPage() {
       Object.values(portfolio.holdings).reduce((s, h) => s + h.balance * h.avgPrice, 0)
     : 0
   const pnlAbs = portfolioValue - 10000
-  const pnlPct = (pnlAbs / 10000) * 100
+  const pnlPercent = (pnlAbs / 10000) * 100
   const myRank = portfolio
     ? leaderboard.findIndex(e => e.wallet.toLowerCase() === address?.toLowerCase()) + 1
     : 0
@@ -295,12 +325,12 @@ export default function ArenaPage() {
                   Connect your wallet<br />to join the Arena
                 </div>
                 <button
-                  onClick={() => connect({ connector: injected() })}
-                  disabled={connectPending}
+                  onClick={() => openConnectModal?.()}
+                  disabled={false}
                   className="neon-btn"
                   style={{ fontSize: '10px', padding: '8px 20px', width: 'auto' }}
                 >
-                  {connectPending ? '◈ CONNECTING...' : '◈ CONNECT WALLET'}
+                  {'◈ CONNECT WALLET'}
                 </button>
               </div>
             )}
@@ -348,7 +378,7 @@ export default function ArenaPage() {
                   <div className="metric-row">
                     <span className="metric-label">P&L</span>
                     <span className="metric-val" style={{ color: pnlAbs >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      {pnlAbs >= 0 ? '+' : ''}${Math.abs(pnlAbs).toFixed(2)} ({pnlAbs >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%)
+                      {pnlAbs >= 0 ? '+' : ''}${Math.abs(pnlAbs).toFixed(2)} ({pnlAbs >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
                     </span>
                   </div>
                   <div className="metric-row">
@@ -525,7 +555,7 @@ export default function ArenaPage() {
                 {/* Execute button */}
                 {!isConnected ? (
                   <button
-                    onClick={() => connect({ connector: injected() })}
+                    onClick={() => openConnectModal?.()}
                     className="neon-btn"
                     style={{ fontSize: '10px' }}
                   >
@@ -584,8 +614,8 @@ export default function ArenaPage() {
             {/* Mobile portfolio summary */}
             <div className="sm:hidden" style={{ marginTop: '8px' }}>
               {!isConnected && (
-                <button onClick={() => connect({ connector: injected() })} disabled={connectPending} className="neon-btn" style={{ fontSize: '10px' }}>
-                  {connectPending ? '◈ CONNECTING...' : '◈ CONNECT WALLET TO JOIN'}
+                <button onClick={() => openConnectModal?.()} disabled={false} className="neon-btn" style={{ fontSize: '10px' }}>
+                  {'◈ CONNECT WALLET TO JOIN'}
                 </button>
               )}
               {isConnected && !joined && (
@@ -598,7 +628,7 @@ export default function ArenaPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
                     <span style={{ color: 'rgba(0,255,65,0.5)' }}>Portfolio</span>
                     <span style={{ color: pnlAbs >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      ${portfolioValue.toFixed(2)} ({pnlAbs >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%)
+                      ${portfolioValue.toFixed(2)} ({pnlAbs >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
                     </span>
                   </div>
                 </div>
@@ -662,8 +692,8 @@ export default function ArenaPage() {
                   <div style={{ fontSize: '10px', color: isMe ? 'var(--green)' : 'rgba(0,255,65,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)' }}>
                     {shortAddr(entry.wallet)}{isMe && ' ← you'}
                   </div>
-                  <div style={{ fontSize: '10px', color: entry.pnlPct >= 0 ? 'var(--green)' : 'var(--red)', textAlign: 'right' }}>
-                    {entry.pnlPct >= 0 ? '+' : ''}{entry.pnlPct.toFixed(1)}%
+                  <div style={{ fontSize: '10px', color: entry.pnlPercent >= 0 ? 'var(--green)' : 'var(--red)', textAlign: 'right' }}>
+                    {entry.pnlPercent >= 0 ? '+' : ''}{entry.pnlPercent.toFixed(1)}%
                   </div>
                   <div style={{ fontSize: '10px', color: 'rgba(0,255,65,0.7)', textAlign: 'right' }}>
                     {fmtP(entry.currentValue)}
@@ -699,7 +729,7 @@ export default function ArenaPage() {
           return (
             <div key={entry.wallet} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid rgba(0,255,65,0.05)', background: isMe ? 'rgba(0,255,65,0.04)' : 'transparent' }}>
               <span style={{ fontSize: '10px', color: 'rgba(0,255,65,0.5)' }}>#{rank} {shortAddr(entry.wallet)}{isMe ? ' ←' : ''}</span>
-              <span style={{ fontSize: '10px', color: entry.pnlPct >= 0 ? 'var(--green)' : 'var(--red)' }}>{entry.pnlPct >= 0 ? '+' : ''}{entry.pnlPct.toFixed(1)}%</span>
+              <span style={{ fontSize: '10px', color: entry.pnlPercent >= 0 ? 'var(--green)' : 'var(--red)' }}>{entry.pnlPercent >= 0 ? '+' : ''}{entry.pnlPercent.toFixed(1)}%</span>
             </div>
           )
         })}

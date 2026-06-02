@@ -23,12 +23,15 @@ interface ReportData {
   error?: string
 }
 
+function getBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
+  return 'http://localhost:3001'
+}
+
 async function fetchReport(tokenId: string): Promise<ReportData | null> {
   try {
-    const origin = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3001'
-    const r = await fetch(`${origin}/api/report/${encodeURIComponent(tokenId)}`, {
+    const r = await fetch(`${getBaseUrl()}/api/report/${encodeURIComponent(tokenId)}`, {
       next: { revalidate: 300 },
     })
     if (!r.ok) return null
@@ -92,23 +95,28 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   }
 
   const changeStr = `${data.change24h >= 0 ? '+' : ''}${data.change24h.toFixed(2)}%`
-  const ogUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}/api/report/og?token=${token}`
-    : `http://localhost:3001/api/report/og?token=${token}`
+  const priceStr = data.priceUsd < 0.001
+    ? data.priceUsd.toPrecision(4)
+    : data.priceUsd < 1
+    ? data.priceUsd.toFixed(6)
+    : data.priceUsd.toFixed(4)
+  const analysisSummary = (data.synthesis?.analyze ?? '').slice(0, 200)
+  const baseUrl = getBaseUrl()
+  const ogUrl = `${baseUrl}/api/report/og?token=${token}&symbol=${encodeURIComponent(data.symbol)}&price=${encodeURIComponent(priceStr)}&change=${data.change24h.toFixed(2)}&verdict=${encodeURIComponent(data.verdict)}&analysis=${encodeURIComponent(analysisSummary)}`
 
   return {
     title: `$${data.symbol} Intelligence Report — BankrSynth`,
-    description: `${data.verdict} · Price: ${fmtP(data.priceUsd)} · 24h: ${changeStr} | synthterminal.app`,
+    description: `${data.verdict} | $${priceStr} | ${changeStr} | AI analysis on synthterminal.app`,
     openGraph: {
       title: `$${data.symbol} · ${data.verdict} — BankrSynth`,
       description: data.synthesis?.analyze?.slice(0, 160) ?? `${data.symbol} analysis on BankrSynth`,
-      images: [ogUrl],
+      images: [{ url: ogUrl, width: 1200, height: 630 }],
       type: 'website',
     },
     twitter: {
       card: 'summary_large_image',
       title: `$${data.symbol} Analysis — BankrSynth`,
-      description: `${data.verdict} · ${fmtP(data.priceUsd)} · ${changeStr}`,
+      description: `${data.verdict} · $${priceStr} · ${changeStr}`,
       images: [ogUrl],
     },
   }

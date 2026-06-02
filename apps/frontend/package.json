@@ -13,8 +13,10 @@
   "dependencies": {
     "@bankrsynth/shared": "workspace:*",
     "@bankrsynth/synth-sdk": "workspace:*",
+    "@rainbow-me/rainbowkit": "^2.2.11",
     "@tanstack/react-query": "^5.100.9",
     "@types/three": "^0.184.1",
+    "@upstash/redis": "^1.38.0",
     "framer-motion": "^12.38.0",
     "next": "16.1.6",
     "react": "19.2.3",

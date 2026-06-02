@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import WalletButton from './WalletButton'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
 import BYOKModal from './BYOKModal'
 import { loadBYOK, PROVIDERS, getFreeUsage, FREE_LIMIT, type BYOKConfig } from '@/lib/byok'
 
@@ -115,7 +115,22 @@ export default function Nav() {
             </span>
           </button>
 
-          <WalletButton />
+          <ConnectButton.Custom>
+            {({ account, openConnectModal, openAccountModal, mounted }) => {
+              if (!mounted) return null
+              if (!account) return (
+                <button onClick={openConnectModal} className="wallet-btn">
+                  ◈ connect wallet
+                </button>
+              )
+              return (
+                <button onClick={openAccountModal} className="wallet-btn connected">
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 6px var(--green)', display: 'inline-block', marginRight: '5px', flexShrink: 0 }} />
+                  {account.displayName}
+                </button>
+              )
+            }}
+          </ConnectButton.Custom>
 
           {/* Mobile hamburger */}
           <button
