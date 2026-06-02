@@ -2,240 +2,292 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 
-const PARTICLE_COUNT = 2800
-
-const vertexShader = `
-  attribute float aSize;
-  attribute vec3 aColor;
-  varying vec3 vColor;
-  varying float vAlpha;
-  uniform float time;
-  void main(){
-    vColor = aColor;
-    vec4 mvp = modelViewMatrix * vec4(position, 1.0);
-    float d = length(mvp.xyz);
-    vAlpha = clamp(1.5 - d/600.0, 0.2, 1.0);
-    gl_PointSize = aSize * (300.0 / d);
-    gl_Position = projectionMatrix * mvp;
-  }
-`
-
-const fragmentShader = `
-  varying vec3 vColor;
-  varying float vAlpha;
-  void main(){
-    vec2 uv = gl_PointCoord - vec2(0.5);
-    float r = length(uv);
-    if(r > 0.5) discard;
-    float glow = smoothstep(0.5, 0.0, r);
-    float core = smoothstep(0.15, 0.0, r);
-    gl_FragColor = vec4(vColor, (glow*0.6 + core*0.4) * vAlpha);
-  }
-`
-
 type Mode = 'sphere' | 'helix' | 'grid' | 'network' | 'terminal'
 
-export default function CryptoSphere({ mode }: { mode: Mode }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const modeRef = useRef(mode)
+interface TokenLite { symbol: string; change: number }
 
-  useEffect(() => { modeRef.current = mode }, [mode])
+// Used only if the live token API is unreachable — so the cloud is never empty.
+const FALLBACK: TokenLite[] = [
+  { symbol: 'BNKR', change: 12.4 }, { symbol: 'AERO', change: -3.2 }, { symbol: 'BRETT', change: 8.7 },
+  { symbol: 'DEGEN', change: -6.1 }, { symbol: 'TOSHI', change: 21.5 }, { symbol: 'VIRTUAL', change: 4.3 },
+  { symbol: 'AIXBT', change: -11.8 }, { symbol: 'AEON', change: 38.5 }, { symbol: 'MORPHO', change: 2.1 },
+  { symbol: 'CBBTC', change: 0.4 }, { symbol: 'KEYCAT', change: 54.2 }, { symbol: 'MIGGLES', change: -9.4 },
+  { symbol: 'DRB', change: 17.9 }, { symbol: 'MOCHI', change: -22.6 }, { symbol: 'BENJI', change: 6.8 },
+  { symbol: 'HIGHER', change: 31.0 }, { symbol: 'NORMIE', change: -14.3 }, { symbol: 'SPEC', change: 9.2 },
+  { symbol: 'ORBIT', change: 354.3 }, { symbol: 'BASEETH', change: 0.3 }, { symbol: 'WELL', change: -4.7 },
+  { symbol: 'PRIME', change: 5.6 }, { symbol: 'DACKIE', change: -18.1 }, { symbol: 'TYBG', change: 27.4 },
+  { symbol: 'ZRO', change: -2.9 }, { symbol: 'OX', change: 13.3 }, { symbol: 'B3', change: 41.7 },
+  { symbol: 'CLANKER', change: -7.5 }, { symbol: 'DOGINME', change: 19.8 }, { symbol: 'FAI', change: -5.2 },
+]
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
+}
+
+function makeCardTexture(symbol: string, change: number): THREE.CanvasTexture {
+  const W = 256, H = 112
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  const pos = change >= 0
+  const color = pos ? '#00ff41' : '#ff2d55'
+  const bg = pos ? 'rgba(0,16,6,0.82)' : 'rgba(18,0,5,0.82)'
+
+  ctx.clearRect(0, 0, W, H)
+
+  // Card body + neon border with glow
+  const pad = 10
+  ctx.save()
+  ctx.shadowColor = color
+  ctx.shadowBlur = 22
+  ctx.fillStyle = bg
+  roundRect(ctx, pad, pad, W - pad * 2, H - pad * 2, 8)
+  ctx.fill()
+  ctx.lineWidth = 2.5
+  ctx.strokeStyle = color
+  ctx.stroke()
+  ctx.restore()
+
+  // Ticker
+  ctx.shadowColor = color
+  ctx.shadowBlur = 8
+  ctx.fillStyle = '#e8ffee'
+  ctx.font = 'bold 38px "Share Tech Mono", monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(symbol.slice(0, 8), W / 2, H / 2 - 14)
+
+  // Percentage
+  ctx.fillStyle = color
+  ctx.shadowBlur = 12
+  ctx.font = '30px "Share Tech Mono", monospace'
+  const pct = `${pos ? '+' : ''}${change.toFixed(1)}%`
+  ctx.fillText(pct, W / 2, H / 2 + 26)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.minFilter = THREE.LinearFilter
+  tex.magFilter = THREE.LinearFilter
+  tex.needsUpdate = true
+  return tex
+}
+
+export default function CryptoSphere(_props: { mode?: Mode }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+    let disposed = false
+    let animId = 0
+    const cleanupFns: (() => void)[] = []
 
     const isMobile = window.innerWidth < 768
-    const particleCount = isMobile ? 1200 : PARTICLE_COUNT
+    const CARD_COUNT = isMobile ? 130 : 290
+    const RADIUS = isMobile ? 150 : 185
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2))
     renderer.setSize(window.innerWidth, window.innerHeight)
     renderer.setClearColor(0x000000, 0)
-    if (isMobile) renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
 
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000)
-    camera.position.z = 450
-    if (isMobile) camera.position.z = 550  // pull back for smaller apparent size on mobile
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000)
+    camera.position.z = isMobile ? 560 : 470
 
-    scene.add(new THREE.AmbientLight(0x001a05, 2))
-    const gL = new THREE.PointLight(0x00ff41, 2, 600); gL.position.set(0, 0, 200); scene.add(gL)
-    const rL = new THREE.PointLight(0xff1a3c, 1.5, 500); rL.position.set(200, 100, -100); scene.add(rL)
-    const cL = new THREE.PointLight(0x00e5ff, 1, 400); cL.position.set(-200, -100, 100); scene.add(cL)
+    const group = new THREE.Group()
+    scene.add(group)
 
-    const positions = new Float32Array(particleCount * 3)
-    const colors = new Float32Array(particleCount * 3)
-    const sizes = new Float32Array(particleCount)
-    const phases = new Float32Array(particleCount)
-    const types = new Uint8Array(particleCount)
-    const targets = new Float32Array(particleCount * 3)
+    // interaction state
+    let isDragging = false, prevX = 0, prevY = 0
+    let manualRotX = 0, manualRotY = 0
+    let targetZ = camera.position.z
 
-    for (let i = 0; i < particleCount; i++) {
-      phases[i] = Math.random() * Math.PI * 2
-      const r = Math.random()
-      types[i] = r < 0.6 ? 0 : r < 0.85 ? 1 : 2
-      sizes[i] = types[i] === 2 ? 2.5 + Math.random() * 3 : 1 + Math.random() * 2
-      const phi = Math.acos(-1 + 2 * Math.random())
-      const theta = Math.random() * Math.PI * 2
-      const rad = 180 + Math.random() * 40
-      positions[i*3] = rad * Math.sin(phi) * Math.cos(theta)
-      positions[i*3+1] = rad * Math.sin(phi) * Math.sin(theta)
-      positions[i*3+2] = rad * Math.cos(phi)
-      if (types[i] === 2) { colors[i*3]=1; colors[i*3+1]=0.1; colors[i*3+2]=0.2 }
-      else if (types[i] === 1) { colors[i*3]=0; colors[i*3+1]=0.9; colors[i*3+2]=1 }
-      else { colors[i*3]=0; colors[i*3+1]=1; colors[i*3+2]=0.25 }
-      targets[i*3] = positions[i*3]; targets[i*3+1] = positions[i*3+1]; targets[i*3+2] = positions[i*3+2]
+    const sprites: THREE.Sprite[] = []
+    const basePos: THREE.Vector3[] = []
+    const phases: number[] = []
+    const baseScale: { w: number; h: number }[] = []
+    const tmp = new THREE.Vector3()
+
+    async function init() {
+      // Pull real Base token data so the cloud reflects the live market
+      let tokens: TokenLite[] = []
+      try {
+        const buckets = ['trending', 'high_volume', 'new_launches']
+        const lists = await Promise.all(
+          buckets.map(b => fetch(`/api/tokens?bucket=${b}`).then(r => r.json()).catch(() => ({}))),
+        ) as Array<{ tokens?: Array<{ symbol?: string; change24h?: number }> }>
+        const map = new Map<string, TokenLite>()
+        for (const l of lists) {
+          for (const t of l.tokens ?? []) {
+            if (t.symbol && !map.has(t.symbol)) map.set(t.symbol, { symbol: t.symbol, change: t.change24h ?? 0 })
+          }
+        }
+        tokens = [...map.values()]
+      } catch { /* fall through */ }
+      if (tokens.length < 12) tokens = FALLBACK
+      if (disposed) return
+
+      // Cache one texture per unique token symbol; share across duplicate cards.
+      const texCache = new Map<string, THREE.CanvasTexture>()
+      const getTex = (t: TokenLite) => {
+        let tex = texCache.get(t.symbol)
+        if (!tex) { tex = makeCardTexture(t.symbol, t.change); texCache.set(t.symbol, tex) }
+        return tex
+      }
+
+      // Fibonacci sphere distribution with mild jitter for a dense, overlapping cloud
+      const golden = Math.PI * (3 - Math.sqrt(5))
+      for (let i = 0; i < CARD_COUNT; i++) {
+        const t = tokens[i % tokens.length]
+        const y = 1 - (i / (CARD_COUNT - 1)) * 2
+        const r = Math.sqrt(Math.max(0, 1 - y * y))
+        const theta = golden * i
+        const jitter = 0.92 + Math.random() * 0.16
+        const rad = RADIUS * jitter
+        const px = Math.cos(theta) * r * rad
+        const py = y * rad
+        const pz = Math.sin(theta) * r * rad
+
+        const mat = new THREE.SpriteMaterial({ map: getTex(t), transparent: true, depthWrite: false, depthTest: true })
+        const sprite = new THREE.Sprite(mat)
+        // Bigger movers slightly larger — heatmap feel
+        const mul = Math.min(1.55, 1 + Math.min(Math.abs(t.change), 300) / 320)
+        const w = (isMobile ? 30 : 38) * mul
+        const h = w * (112 / 256)
+        sprite.scale.set(w, h, 1)
+        sprite.position.set(px, py, pz)
+        group.add(sprite)
+
+        sprites.push(sprite)
+        basePos.push(new THREE.Vector3(px, py, pz))
+        baseScale.push({ w, h })
+        phases.push(Math.random() * Math.PI * 2)
+      }
+
+      cleanupFns.push(() => {
+        for (const s of sprites) { s.material.dispose() }
+        for (const tex of texCache.values()) tex.dispose()
+      })
     }
 
-    const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
-    geo.setAttribute('aColor', new THREE.BufferAttribute(colors, 3))
-    geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1))
-
-    const mat = new THREE.ShaderMaterial({
-      vertexShader, fragmentShader,
-      uniforms: { time: { value: 0 } },
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
-    })
-
-    const particles = new THREE.Points(geo, mat)
-    scene.add(particles)
-
-    const networkRandAng = new Float32Array(particleCount)
-    const networkRandRad = new Float32Array(particleCount)
-    const networkRandZ = new Float32Array(particleCount)
-    const terminalRandZ = new Float32Array(particleCount)
-    for (let i = 0; i < particleCount; i++) {
-      networkRandAng[i] = Math.random() * Math.PI * 2
-      networkRandRad[i] = 80 * Math.random()
-      networkRandZ[i] = (Math.random() - 0.5) * 200
-      terminalRandZ[i] = -200 + Math.random() * 100
+    // ── interaction ──
+    const onDown = (x: number, y: number) => { isDragging = true; prevX = x; prevY = y }
+    const onMove = (x: number, y: number) => {
+      if (!isDragging) return
+      manualRotY += (x - prevX) * 0.005
+      manualRotX += (y - prevY) * 0.005
+      manualRotX = Math.max(-1.2, Math.min(1.2, manualRotX))
+      prevX = x; prevY = y
     }
+    const onUp = () => { isDragging = false }
 
-    function getTarget(m: Mode, i: number): [number, number, number] {
-      if (m === 'sphere') {
-        const phi = Math.acos(-1 + 2 * (i / particleCount))
-        const theta = (i * 2.399) * Math.PI * 2
-        return [190 * Math.sin(phi) * Math.cos(theta), 190 * Math.sin(phi) * Math.sin(theta), 190 * Math.cos(phi)]
-      }
-      if (m === 'helix') {
-        const t = i / particleCount
-        return [130 * Math.cos(t * Math.PI * 20), (t - 0.5) * 480, 130 * Math.sin(t * Math.PI * 20)]
-      }
-      if (m === 'grid') {
-        const side = Math.ceil(Math.cbrt(particleCount))
-        return [((i % side) / side - 0.5) * 380, (Math.floor(i / side) % side / side - 0.5) * 380, (Math.floor(i / side / side) / side - 0.5) * 380]
-      }
-      if (m === 'network') {
-        const cluster = Math.floor(i / (particleCount / 8))
-        const cx = (cluster % 4 - 1.5) * 220
-        const cy = (Math.floor(cluster / 4) - 0.5) * 220
-        return [cx + networkRandRad[i] * Math.cos(networkRandAng[i]), cy + networkRandRad[i] * Math.sin(networkRandAng[i]), networkRandZ[i]]
-      }
-      const cols = isMobile ? 50 : 80, rows = Math.ceil(particleCount / cols)
-      return [(i % cols / cols - 0.5) * 680, (Math.floor(i / cols) / rows - 0.5) * 480, terminalRandZ[i]]
+    const md = (e: MouseEvent) => onDown(e.clientX, e.clientY)
+    const mm = (e: MouseEvent) => onMove(e.clientX, e.clientY)
+    const ts = (e: TouchEvent) => onDown(e.touches[0].clientX, e.touches[0].clientY)
+    const tm = (e: TouchEvent) => { onMove(e.touches[0].clientX, e.touches[0].clientY); if (isDragging) e.preventDefault() }
+    const wheel = (e: WheelEvent) => { e.preventDefault(); targetZ = Math.max(220, Math.min(900, targetZ + e.deltaY * 0.35)) }
+
+    canvas.addEventListener('mousedown', md)
+    canvas.addEventListener('mousemove', mm)
+    window.addEventListener('mouseup', onUp)
+    canvas.addEventListener('mouseleave', onUp)
+    canvas.addEventListener('touchstart', ts, { passive: true })
+    canvas.addEventListener('touchmove', tm, { passive: false })
+    canvas.addEventListener('touchend', onUp)
+    canvas.addEventListener('wheel', wheel, { passive: false })
+
+    const onResize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight
+      camera.updateProjectionMatrix()
+      renderer.setSize(window.innerWidth, window.innerHeight)
     }
-
-    function arrangeParticles(m: Mode) {
-      for (let i = 0; i < particleCount; i++) {
-        const t = getTarget(m, i)
-        targets[i*3] = t[0]; targets[i*3+1] = t[1]; targets[i*3+2] = t[2]
-      }
-    }
-
-    scene.add(new THREE.Mesh(
-      new THREE.SphereGeometry(195, 32, 32),
-      new THREE.MeshBasicMaterial({ color: 0x00ff41, wireframe: true, transparent: true, opacity: 0.04 })
-    ))
-
-    const crystalGeo = new THREE.IcosahedronGeometry(45, 1)
-    const crystalMat = new THREE.MeshStandardMaterial({ color: 0xff1a3c, emissive: 0xcc0020, emissiveIntensity: 0.8, metalness: 0.9, roughness: 0.1, transparent: true, opacity: 0.7 })
-    const crystal = new THREE.Mesh(crystalGeo, crystalMat)
-    scene.add(crystal)
-
-    const ringGeo = new THREE.RingGeometry(198, 200, 128)
-    const ring1 = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0x00ff41, transparent: true, opacity: 0.15, side: THREE.DoubleSide }))
-    ring1.rotation.x = Math.PI * 0.15; scene.add(ring1)
-    const ring2 = new THREE.Mesh(ringGeo.clone(), new THREE.MeshBasicMaterial({ color: 0xff1a3c, transparent: true, opacity: 0.1, side: THREE.DoubleSide }))
-    ring2.rotation.x = Math.PI * 0.55; ring2.rotation.y = Math.PI * 0.3; scene.add(ring2)
-
-    let isDragging = false, prevMx = 0, prevMy = 0, manualRotX = 0, manualRotY = 0
-    const onMouseDown = (e: MouseEvent) => { isDragging = true; prevMx = e.clientX; prevMy = e.clientY }
-    const onMouseMove = (e: MouseEvent) => { if (!isDragging) return; manualRotY += (e.clientX - prevMx) * 0.005; manualRotX += (e.clientY - prevMy) * 0.005; prevMx = e.clientX; prevMy = e.clientY }
-    const onMouseUp = () => { isDragging = false }
-    const onTouchStart = (e: TouchEvent) => { isDragging = true; prevMx = e.touches[0].clientX; prevMy = e.touches[0].clientY }
-    const onTouchMove = (e: TouchEvent) => { if (!isDragging) return; manualRotY += (e.touches[0].clientX - prevMx) * 0.005; manualRotX += (e.touches[0].clientY - prevMy) * 0.005; prevMx = e.touches[0].clientX; prevMy = e.touches[0].clientY; e.preventDefault() }
-    const onTouchEnd = () => { isDragging = false }
-    canvas.addEventListener('mousedown', onMouseDown)
-    canvas.addEventListener('mousemove', onMouseMove)
-    canvas.addEventListener('mouseup', onMouseUp)
-    canvas.addEventListener('mouseleave', onMouseUp)
-    canvas.addEventListener('touchstart', onTouchStart)
-    canvas.addEventListener('touchmove', onTouchMove, { passive: false })
-    canvas.addEventListener('touchend', onTouchEnd)
-
-    const onResize = () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight) }
     window.addEventListener('resize', onResize)
 
-    let currentMode: Mode = modeRef.current
-    arrangeParticles(currentMode)
     let autoRotY = 0, time = 0
-    let animId: number
-
     function animate() {
       animId = requestAnimationFrame(animate)
       time += 0.008
-      mat.uniforms.time.value = time
 
-      if (modeRef.current !== currentMode) {
-        currentMode = modeRef.current
-        arrangeParticles(currentMode)
-      }
+      // gentle auto-rotation + drag
+      autoRotY += 0.0018
+      group.rotation.y = autoRotY + manualRotY
+      group.rotation.x = manualRotX
 
-      autoRotY += 0.003
-      particles.rotation.y = autoRotY + manualRotY
-      particles.rotation.x = manualRotX
-      ring1.rotation.z = time * 0.08
-      ring2.rotation.y = time * 0.12
-      crystal.rotation.x = time * 0.4; crystal.rotation.y = time * 0.6; crystal.rotation.z = time * 0.3
-      crystalMat.emissiveIntensity = Math.sin(time * 2) * 0.15 + 0.7
+      // breathing
+      const breathe = 1 + Math.sin(time * 0.6) * 0.02
+      group.scale.setScalar(breathe)
 
-      const pos = geo.attributes.position.array as Float32Array
-      for (let i = 0; i < particleCount; i++) {
-        const wave = Math.sin(time * 1.2 + phases[i]) * 0.8
-        pos[i*3] += (targets[i*3] + wave - pos[i*3]) * 0.1
-        pos[i*3+1] += (targets[i*3+1] + wave - pos[i*3+1]) * 0.1
-        pos[i*3+2] += (targets[i*3+2] - pos[i*3+2]) * 0.1
-      }
-      geo.attributes.position.needsUpdate = true
-
-      gL.position.x = Math.sin(time * 0.5) * 300
-      gL.position.z = Math.cos(time * 0.5) * 300
-      camera.position.y = Math.sin(time * 0.2) * 8
+      // smooth zoom
+      camera.position.z += (targetZ - camera.position.z) * 0.08
+      camera.position.y = Math.sin(time * 0.18) * 6
       camera.lookAt(0, 0, 0)
+
+      group.updateMatrixWorld(true)
+
+      // per-card float + atmospheric depth fade
+      for (let i = 0; i < sprites.length; i++) {
+        const b = basePos[i]
+        const fl = Math.sin(time * 0.9 + phases[i]) * 2.2
+        sprites[i].position.set(b.x, b.y + fl, b.z)
+        sprites[i].getWorldPosition(tmp)
+        const dist = tmp.distanceTo(camera.position)
+        const near = camera.position.z - RADIUS
+        const far = camera.position.z + RADIUS
+        const f = (dist - near) / (far - near) // 0 near .. 1 far
+        sprites[i].material.opacity = Math.max(0.22, Math.min(1, 1.05 - f * 0.85))
+      }
+
       renderer.render(scene, camera)
     }
-    animate()
+
+    init().then(() => { if (!disposed) animate() })
 
     return () => {
+      disposed = true
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', onResize)
-      canvas.removeEventListener('mousedown', onMouseDown)
-      canvas.removeEventListener('mousemove', onMouseMove)
-      canvas.removeEventListener('mouseup', onMouseUp)
-      canvas.removeEventListener('mouseleave', onMouseUp)
-      canvas.removeEventListener('touchstart', onTouchStart)
-      canvas.removeEventListener('touchmove', onTouchMove)
-      canvas.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('mouseup', onUp)
+      canvas.removeEventListener('mousedown', md)
+      canvas.removeEventListener('mousemove', mm)
+      canvas.removeEventListener('mouseleave', onUp)
+      canvas.removeEventListener('touchstart', ts)
+      canvas.removeEventListener('touchmove', tm)
+      canvas.removeEventListener('touchend', onUp)
+      canvas.removeEventListener('wheel', wheel)
+      cleanupFns.forEach(fn => fn())
       renderer.dispose()
     }
   }, [])
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'auto' }}
-    />
+    <>
+      {/* Cyberpunk green grid backdrop */}
+      <div
+        style={{
+          position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
+          backgroundColor: '#000000',
+          backgroundImage:
+            'linear-gradient(rgba(0,255,65,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,65,0.06) 1px, transparent 1px)',
+          backgroundSize: '44px 44px',
+        }}
+      />
+      {/* Radial vignette for depth */}
+      <div
+        style={{
+          position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none',
+          background: 'radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.85) 100%)',
+        }}
+      />
+      <canvas
+        ref={canvasRef}
+        style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'auto' }}
+      />
+    </>
   )
 }
