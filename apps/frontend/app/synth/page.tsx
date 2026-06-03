@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount } from 'wagmi'
+import { useAccount, useSignTypedData } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { createX402Payment } from '@/lib/x402'
 
@@ -54,6 +54,7 @@ function fmtC(n: number): string {
 export default function SynthPage() {
   const router = useRouter()
   const { address, isConnected } = useAccount()
+  const { signTypedDataAsync } = useSignTypedData()
   const [bucket, setBucket] = useState<Bucket>('trending')
   const [mode, setMode] = useState<Mode>('analyze')
   const [tokens, setTokens] = useState<Token[]>([])
@@ -165,7 +166,7 @@ export default function SynthPage() {
         setError('Payment recipient not configured. Contact support.')
         return
       }
-      const payment = await createX402Payment(address, recipient)
+      const payment = await createX402Payment(address, recipient, signTypedDataAsync)
       if (!payment) {
         setLoading(false)
         setOutput('')

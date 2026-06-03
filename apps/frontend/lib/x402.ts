@@ -1,14 +1,17 @@
 'use client'
+import type { UseSignTypedDataReturnType } from 'wagmi'
 import { USDC_SKALE_BASE, SYNTHESIS_PRICE } from './chains'
 
-interface EthereumProvider {
-  request(args: { method: string; params?: unknown[] }): Promise<unknown>
-}
+// wagmi's signTypedDataAsync — routes through the active connector, so this
+// works for injected wallets (MetaMask), Coinbase Wallet, and any
+// WalletConnect-paired mobile wallet alike.
+type SignTypedDataAsync = UseSignTypedDataReturnType['signTypedDataAsync']
 
-declare global {
-  interface Window {
-    ethereum?: EthereumProvider
-  }
+function randomNonce(): `0x${string}` {
+  // ERC-3009 `nonce` is a bytes32 — must be exactly 32 bytes (64 hex chars).
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}` as `0x${string}`
 }
 
 /**
@@ -16,60 +19,50 @@ declare global {
  * TransferWithAuthorization over USDC.e on SKALE Base. No gas, no on-chain tx
  * from the user — the server settles it via the SKALE facilitator.
  *
+ * Signing goes through wagmi's `signTypedDataAsync` (the active connector), so
+ * it is not limited to injected providers.
+ *
  * Returns a base64-encoded payment payload for the X-PAYMENT header, or null
- * if no injected wallet is available or the user rejects the signature.
+ * if the recipient is missing or the user rejects the signature.
  */
 export async function createX402Payment(
   walletAddress: string,
   recipient: string,
+  signTypedDataAsync: SignTypedDataAsync,
 ): Promise<string | null> {
-  if (typeof window === 'undefined' || !window.ethereum) return null
   if (!recipient) {
     console.error('x402 error: missing recipient address')
     return null
   }
 
   try {
+    const from = walletAddress as `0x${string}`
+    const to = recipient as `0x${string}`
+    const value = SYNTHESIS_PRICE
     const validAfter = 0n
     const validBefore = BigInt(Math.floor(Date.now() / 1000) + 300)
-    const nonce = `0x${crypto.randomUUID().replace(/-/g, '')}` as `0x${string}`
+    const nonce = randomNonce()
 
-    const domain = {
-      name: 'USD Coin',
-      version: '2',
-      chainId: 1187947933,
-      verifyingContract: USDC_SKALE_BASE,
-    }
-    const types = {
-      TransferWithAuthorization: [
-        { name: 'from',        type: 'address' },
-        { name: 'to',          type: 'address' },
-        { name: 'value',       type: 'uint256' },
-        { name: 'validAfter',  type: 'uint256' },
-        { name: 'validBefore', type: 'uint256' },
-        { name: 'nonce',       type: 'bytes32' },
-      ],
-    }
-    const message = {
-      from:        walletAddress,
-      to:          recipient,
-      value:       SYNTHESIS_PRICE.toString(),
-      validAfter:  validAfter.toString(),
-      validBefore: validBefore.toString(),
-      nonce,
-    }
-
-    const signature = await window.ethereum.request({
-      method: 'eth_signTypedData_v4',
-      params: [
-        walletAddress,
-        JSON.stringify({
-          domain,
-          types,
-          primaryType: 'TransferWithAuthorization',
-          message,
-        }),
-      ],
+    const signature = await signTypedDataAsync({
+      account: from,
+      domain: {
+        name: 'USD Coin',
+        version: '2',
+        chainId: 1187947933,
+        verifyingContract: USDC_SKALE_BASE,
+      },
+      types: {
+        TransferWithAuthorization: [
+          { name: 'from',        type: 'address' },
+          { name: 'to',          type: 'address' },
+          { name: 'value',       type: 'uint256' },
+          { name: 'validAfter',  type: 'uint256' },
+          { name: 'validBefore', type: 'uint256' },
+          { name: 'nonce',       type: 'bytes32' },
+        ],
+      },
+      primaryType: 'TransferWithAuthorization',
+      message: { from, to, value, validAfter, validBefore, nonce },
     })
 
     return btoa(
@@ -79,9 +72,9 @@ export async function createX402Payment(
         payload: {
           signature,
           authorization: {
-            from: walletAddress,
-            to: recipient,
-            value: SYNTHESIS_PRICE.toString(),
+            from,
+            to,
+            value: value.toString(),
             validAfter: validAfter.toString(),
             validBefore: validBefore.toString(),
             nonce,
