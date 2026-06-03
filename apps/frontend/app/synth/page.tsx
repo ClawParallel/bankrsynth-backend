@@ -166,6 +166,14 @@ export default function SynthPage() {
         setError('Payment recipient not configured. Contact support.')
         return
       }
+      // The facilitator rejects self-transfers (from == to). Catch it here so
+      // the recipient/owner wallet gets a clear message instead of a 402.
+      if (address.toLowerCase() === recipient.toLowerCase()) {
+        setLoading(false)
+        setOutput('')
+        setError('This wallet is the payment recipient — connect a different wallet to pay.')
+        return
+      }
       const payment = await createX402Payment(address, recipient as `0x${string}`, signTypedDataAsync)
       if (!payment) {
         setLoading(false)
