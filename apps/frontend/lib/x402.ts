@@ -1,6 +1,13 @@
 'use client'
 import type { UseSignTypedDataReturnType } from 'wagmi'
-import { USDC_SKALE_BASE, SYNTHESIS_PRICE } from './chains'
+import {
+  USDC_SKALE_BASE,
+  SYNTHESIS_PRICE,
+  TOKEN_NAME,
+  TOKEN_VERSION,
+  CHAIN_ID,
+  X402_NETWORK,
+} from './chains'
 
 // wagmi's signTypedDataAsync — routes through the active connector, so this
 // works for injected wallets (MetaMask), Coinbase Wallet, and any
@@ -15,19 +22,20 @@ function randomNonce(): `0x${string}` {
 }
 
 /**
- * Builds an x402 "exact" payment by having the user sign an ERC-3009
+ * Builds an x402 "exact" PaymentPayload by having the user sign an ERC-3009
  * TransferWithAuthorization over USDC.e on SKALE Base. No gas, no on-chain tx
  * from the user — the server settles it via the SKALE facilitator.
  *
+ * The returned value is the base64-encoded x402 `PaymentPayload` (including the
+ * required `x402Version` field) for the `X-PAYMENT` header. Returns null if the
+ * recipient is missing or the user rejects the signature.
+ *
  * Signing goes through wagmi's `signTypedDataAsync` (the active connector), so
  * it is not limited to injected providers.
- *
- * Returns a base64-encoded payment payload for the X-PAYMENT header, or null
- * if the recipient is missing or the user rejects the signature.
  */
 export async function createX402Payment(
-  walletAddress: string,
-  recipient: string,
+  walletAddress: `0x${string}`,
+  recipient: `0x${string}`,
   signTypedDataAsync: SignTypedDataAsync,
 ): Promise<string | null> {
   if (!recipient) {
@@ -36,19 +44,16 @@ export async function createX402Payment(
   }
 
   try {
-    const from = walletAddress as `0x${string}`
-    const to = recipient as `0x${string}`
-    const value = SYNTHESIS_PRICE
     const validAfter = 0n
     const validBefore = BigInt(Math.floor(Date.now() / 1000) + 300)
     const nonce = randomNonce()
 
     const signature = await signTypedDataAsync({
-      account: from,
+      account: walletAddress,
       domain: {
-        name: 'USD Coin',
-        version: '2',
-        chainId: 1187947933,
+        name: TOKEN_NAME, // 'Bridged USDC (SKALE Bridge)'
+        version: TOKEN_VERSION, // '1'
+        chainId: CHAIN_ID,
         verifyingContract: USDC_SKALE_BASE,
       },
       types: {
@@ -62,28 +67,38 @@ export async function createX402Payment(
         ],
       },
       primaryType: 'TransferWithAuthorization',
-      message: { from, to, value, validAfter, validBefore, nonce },
+      message: {
+        from: walletAddress,
+        to: recipient,
+        value: SYNTHESIS_PRICE,
+        validAfter,
+        validBefore,
+        nonce,
+      },
     })
 
-    return btoa(
-      JSON.stringify({
-        scheme: 'exact',
-        network: 'eip155:1187947933',
-        payload: {
-          signature,
-          authorization: {
-            from,
-            to,
-            value: value.toString(),
-            validAfter: validAfter.toString(),
-            validBefore: validBefore.toString(),
-            nonce,
-          },
+    // x402 PaymentPayload (v1 envelope). `x402Version` is required by the
+    // facilitator; `payload.authorization` values are decimal strings.
+    const paymentPayload = {
+      x402Version: 1,
+      scheme: 'exact',
+      network: X402_NETWORK,
+      payload: {
+        signature,
+        authorization: {
+          from: walletAddress,
+          to: recipient,
+          value: SYNTHESIS_PRICE.toString(),
+          validAfter: validAfter.toString(),
+          validBefore: validBefore.toString(),
+          nonce,
         },
-      }),
-    )
+      },
+    }
+
+    return btoa(JSON.stringify(paymentPayload))
   } catch (e) {
-    console.error('x402 error:', e)
+    console.error('x402 sign error:', e)
     return null
   }
 }

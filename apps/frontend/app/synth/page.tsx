@@ -166,7 +166,7 @@ export default function SynthPage() {
         setError('Payment recipient not configured. Contact support.')
         return
       }
-      const payment = await createX402Payment(address, recipient, signTypedDataAsync)
+      const payment = await createX402Payment(address, recipient as `0x${string}`, signTypedDataAsync)
       if (!payment) {
         setLoading(false)
         setOutput('')

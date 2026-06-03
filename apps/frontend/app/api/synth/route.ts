@@ -11,6 +11,26 @@ const X402_NETWORK = 'eip155:1187947933'
 const X402_PRICE = '100000' // $0.10 USDC.e (6 decimals)
 const FACILITATOR = process.env.SKALE_FACILITATOR_URL || 'https://facilitator.skale.space'
 
+// x402 PaymentRequirements for this resource. `extra.{name,version}` tells the
+// facilitator the EIP-712 domain of the asset — must match the on-chain
+// USDC.e values ("Bridged USDC (SKALE Bridge)" / "1") and the client's signed
+// domain, or signature recovery in /verify will fail.
+const PAYMENT_REQUIREMENTS = {
+  scheme: 'exact',
+  network: X402_NETWORK,
+  asset: USDC_SKALE_BASE,
+  maxAmountRequired: X402_PRICE,
+  resource: `${process.env.NEXT_PUBLIC_BASE_URL}/api/synth`,
+  description: 'BankrSynth AI Synthesis · $0.10 USDC.e',
+  mimeType: 'application/json',
+  payTo: process.env.SKALE_PAYMENT_RECIPIENT || '',
+  maxTimeoutSeconds: 300,
+  extra: {
+    name: 'Bridged USDC (SKALE Bridge)',
+    version: '1',
+  },
+}
+
 const SYSTEM_PROMPT = `You are BankrSynth — an AI intelligence synthesis engine for Base ecosystem tokens.
 You provide structured, concise market analysis for crypto traders.
 Be direct, technical, and opinionated. No hedging. No disclaimers.
@@ -48,35 +68,43 @@ Max 200 words. No markdown.
 DATA:\n${ctx}`,
 }
 
-async function verifyX402(payment: string): Promise<boolean> {
+function decodePayment(paymentHeader: string): unknown {
+  // X-PAYMENT is the base64-encoded x402 PaymentPayload.
+  return JSON.parse(atob(paymentHeader))
+}
+
+async function verifyX402(paymentHeader: string): Promise<boolean> {
   try {
-    const r = await fetch(`${FACILITATOR}/verify`, {
+    const paymentPayload = decodePayment(paymentHeader)
+    const res = await fetch(`${FACILITATOR}/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        payment,
-        network: X402_NETWORK,
-        maxAmountRequired: X402_PRICE,
-        asset: USDC_SKALE_BASE,
-        recipient: process.env.SKALE_PAYMENT_RECIPIENT,
-      }),
+      body: JSON.stringify({ paymentPayload, paymentRequirements: PAYMENT_REQUIREMENTS }),
     })
-    const d = (await r.json()) as { valid?: boolean }
-    return d.valid === true
-  } catch {
+    const text = await res.text()
+    console.log('[x402] verify status:', res.status)
+    console.log('[x402] verify response:', text)
+    const data = JSON.parse(text) as { isValid?: boolean; invalidReason?: string }
+    return data.isValid === true // NOTE: facilitator returns `isValid`, not `valid`
+  } catch (e) {
+    console.error('[x402] verify error:', e)
     return false
   }
 }
 
-async function settle(payment: string): Promise<void> {
+async function settle(paymentHeader: string): Promise<void> {
   try {
-    await fetch(`${FACILITATOR}/settle`, {
+    const paymentPayload = decodePayment(paymentHeader)
+    const res = await fetch(`${FACILITATOR}/settle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ payment }),
+      body: JSON.stringify({ paymentPayload, paymentRequirements: PAYMENT_REQUIREMENTS }),
     })
-  } catch {
-    /* settlement is best-effort; analysis already returned */
+    console.log('[x402] settle status:', res.status)
+    console.log('[x402] settle response:', await res.text())
+  } catch (e) {
+    // settlement is best-effort; analysis already returned
+    console.error('[x402] settle error:', e)
   }
 }
 
@@ -162,20 +190,8 @@ export async function POST(req: NextRequest) {
     const valid = await verifyX402(x402)
     if (!valid) {
       return NextResponse.json(
-        {
-          error: 'payment_required',
-          x402: {
-            scheme: 'exact',
-            network: X402_NETWORK,
-            maxAmountRequired: X402_PRICE,
-            resource: `${process.env.NEXT_PUBLIC_BASE_URL}/api/synth`,
-            description: 'BankrSynth Synthesis · $0.10 USDC.e',
-            payTo: process.env.SKALE_PAYMENT_RECIPIENT || '',
-            maxTimeoutSeconds: 300,
-            asset: USDC_SKALE_BASE,
-          },
-        },
-        { status: 402 },
+        { error: 'payment_required', paymentRequirements: PAYMENT_REQUIREMENTS },
+        { status: 402, headers: { 'X-Payment-Required': JSON.stringify(PAYMENT_REQUIREMENTS) } },
       )
     }
     model = 'claude-sonnet-4-5'
