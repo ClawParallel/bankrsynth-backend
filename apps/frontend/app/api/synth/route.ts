@@ -7,9 +7,15 @@ const rateLimitMap = new Map<string, number>()
 const MAX_FREE_PER_DAY = 5
 
 const USDC_SKALE_BASE = '0x85889c8c714505E0c94b30fcfcF64fE3Ac8FCb20'
-const X402_NETWORK = 'eip155:1187947933'
+// x402-v1 friendly network name for SKALE Base — must match the facilitator's
+// /supported list and the client PaymentPayload. (CAIP-2 "eip155:1187947933"
+// is x402-v2 only.)
+const X402_NETWORK = 'skale-base'
 const X402_PRICE = '100000' // $0.10 USDC.e (6 decimals)
-const FACILITATOR = process.env.SKALE_FACILITATOR_URL || 'https://facilitator.skale.space'
+// Default to a live SKALE-supporting x402 facilitator (AutoIncentive). The old
+// "facilitator.skale.space" host does not exist (ENOTFOUND). Override per-env
+// with SKALE_FACILITATOR_URL — and note Vercel env wins over this default.
+const FACILITATOR = process.env.SKALE_FACILITATOR_URL || 'https://facilitator.x402endpoints.online'
 
 // x402 PaymentRequirements for this resource. `extra.{name,version}` tells the
 // facilitator the EIP-712 domain of the asset — must match the on-chain

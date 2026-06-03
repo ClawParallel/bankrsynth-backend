@@ -27,4 +27,12 @@ export const SYNTHESIS_PRICE  = 100000n // $0.10 USDC.e (6 decimals)
 export const TOKEN_NAME    = 'Bridged USDC (SKALE Bridge)'
 export const TOKEN_VERSION = '1'
 export const CHAIN_ID      = 1187947933
-export const X402_NETWORK  = `eip155:${CHAIN_ID}` as const
+
+// x402 network identifier. The SKALE facilitators expose SKALE Base under the
+// x402-v1 friendly name "skale-base" (the CAIP-2 form "eip155:1187947933" is
+// only registered for x402-v2). Our PaymentPayload uses the v1 envelope, so we
+// must pair x402Version 1 with "skale-base" — this is what the facilitator's
+// /supported list accepts. The numeric CHAIN_ID above is still what the
+// EIP-712 signing domain uses.
+export const X402_VERSION = 1 as const
+export const X402_NETWORK = 'skale-base' as const

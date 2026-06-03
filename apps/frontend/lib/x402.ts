@@ -7,6 +7,7 @@ import {
   TOKEN_VERSION,
   CHAIN_ID,
   X402_NETWORK,
+  X402_VERSION,
 } from './chains'
 
 // wagmi's signTypedDataAsync — routes through the active connector, so this
@@ -80,9 +81,9 @@ export async function createX402Payment(
     // x402 PaymentPayload (v1 envelope). `x402Version` is required by the
     // facilitator; `payload.authorization` values are decimal strings.
     const paymentPayload = {
-      x402Version: 1,
+      x402Version: X402_VERSION,
       scheme: 'exact',
-      network: X402_NETWORK,
+      network: X402_NETWORK, // 'skale-base' (must match facilitator /supported)
       payload: {
         signature,
         authorization: {
