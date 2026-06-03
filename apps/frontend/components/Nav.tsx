@@ -3,8 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import BYOKModal from './BYOKModal'
-import { loadBYOK, PROVIDERS, getFreeUsage, FREE_LIMIT, type BYOKConfig } from '@/lib/byok'
+import { useAccount } from 'wagmi'
 
 const modules = [
   { href: '/synth',    label: 'SYNTH',    icon: '◉' },
@@ -17,27 +16,15 @@ const modules = [
 
 export default function Nav() {
   const path = usePathname()
+  const { isConnected } = useAccount()
   const [clock, setClock] = useState('--:--:--')
   const [blockNum, setBlockNum] = useState(19847301)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [byok, setBYOK] = useState<BYOKConfig | null>(null)
-  const [showBYOK, setShowBYOK] = useState(false)
-  const [freeRemaining, setFreeRemaining] = useState(FREE_LIMIT)
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date().toTimeString().slice(0, 8)), 1000)
     const b = setInterval(() => setBlockNum(n => n + 1), 12400)
     return () => { clearInterval(t); clearInterval(b) }
-  }, [])
-
-  useEffect(() => {
-    const update = () => {
-      setBYOK(loadBYOK())
-      setFreeRemaining(getFreeUsage().remaining)
-    }
-    update()
-    const t = setInterval(update, 5000)
-    return () => clearInterval(t)
   }, [])
 
   useEffect(() => { setMenuOpen(false) }, [path])
@@ -84,49 +71,23 @@ export default function Nav() {
             <span style={{ color: 'rgba(0,200,255,0.5)', fontSize: '9px' }}>#{blockNum.toLocaleString()}</span>
           </div>
 
-          {/* Free counter / provider badge */}
+          {/* Payment status badge */}
           <span
             className="free-counter hide-mobile"
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: '9px',
               letterSpacing: '0.1em',
-              color: byok ? 'rgba(0,255,65,0.6)' : freeRemaining > 0 ? 'rgba(0,255,65,0.45)' : 'rgba(255,165,0,0.7)',
+              color: isConnected ? 'rgba(0,255,65,0.6)' : 'rgba(0,255,65,0.45)',
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
               whiteSpace: 'nowrap',
             }}
           >
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: byok ? 'var(--green)' : freeRemaining > 0 ? 'rgba(0,255,65,0.5)' : 'rgba(255,165,0,0.8)', boxShadow: byok ? '0 0 6px var(--green)' : 'none', flexShrink: 0 }} />
-            {byok
-              ? (PROVIDERS[byok.provider]?.label?.split(' ')[0] ?? 'KEY')
-              : freeRemaining > 0
-                ? `free (${freeRemaining}/${FREE_LIMIT})`
-                : 'limit reached'}
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)', boxShadow: isConnected ? '0 0 6px var(--green)' : 'none', flexShrink: 0 }} />
+            {isConnected ? '⚡ $0.10 / synth' : 'free (5/day)'}
           </span>
-
-          {/* API key button */}
-          <button
-            className="api-key-btn hide-mobile"
-            onClick={() => setShowBYOK(true)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'rgba(0,255,65,0.45)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '9px',
-              letterSpacing: '0.1em',
-              padding: '4px 6px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              transition: 'color 0.15s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--green)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(0,255,65,0.45)')}
-          >
-            ⚙ api key
-          </button>
 
           {/* Connect wallet */}
           <ConnectButton.Custom>
@@ -210,9 +171,6 @@ export default function Nav() {
           <div style={{ color: 'rgba(0,255,65,0.2)' }}>AI-NATIVE AUTONOMOUS TERMINAL</div>
         </div>
       </div>
-      {showBYOK && (
-        <BYOKModal onClose={() => { setShowBYOK(false); setBYOK(loadBYOK()) }} />
-      )}
     </>
   )
 }

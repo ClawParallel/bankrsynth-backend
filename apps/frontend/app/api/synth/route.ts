@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// Two payment modes only:
+//   No wallet → 5 free synthesis/day (per IP) · Haiku · owner pays
+//   Wallet    → $0.10 USDC.e x402 (ERC-3009, gasless) · Sonnet 4.5 · user pays
 const rateLimitMap = new Map<string, number>()
 const MAX_FREE_PER_DAY = 5
+
+const USDC_SKALE_BASE = '0x85889c8c714505E0c94b30fcfcF64fE3Ac8FCb20'
+const X402_NETWORK = 'eip155:1187947933'
+const X402_PRICE = '100000' // $0.10 USDC.e (6 decimals)
+const FACILITATOR = process.env.SKALE_FACILITATOR_URL || 'https://facilitator.skale.space'
 
 const SYSTEM_PROMPT = `You are BankrSynth — an AI intelligence synthesis engine for Base ecosystem tokens.
 You provide structured, concise market analysis for crypto traders.
@@ -40,6 +48,38 @@ Max 200 words. No markdown.
 DATA:\n${ctx}`,
 }
 
+async function verifyX402(payment: string): Promise<boolean> {
+  try {
+    const r = await fetch(`${FACILITATOR}/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        payment,
+        network: X402_NETWORK,
+        maxAmountRequired: X402_PRICE,
+        asset: USDC_SKALE_BASE,
+        recipient: process.env.SKALE_PAYMENT_RECIPIENT,
+      }),
+    })
+    const d = (await r.json()) as { valid?: boolean }
+    return d.valid === true
+  } catch {
+    return false
+  }
+}
+
+async function settle(payment: string): Promise<void> {
+  try {
+    await fetch(`${FACILITATOR}/settle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payment }),
+    })
+  } catch {
+    /* settlement is best-effort; analysis already returned */
+  }
+}
+
 async function callAnthropic(apiKey: string, model: string, prompt: string): Promise<string> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -65,98 +105,18 @@ async function callAnthropic(apiKey: string, model: string, prompt: string): Pro
     .trim()
 }
 
-async function callOpenAICompat(
-  apiKey: string,
-  model: string,
-  prompt: string,
-  baseUrl: string,
-  provider: string,
-): Promise<string> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${apiKey}`,
-    'Content-Type': 'application/json',
-  }
-  if (provider === 'openrouter') {
-    headers['HTTP-Referer'] = 'https://bankrsynth.com'
-    headers['X-Title'] = 'BankrSynth'
-  }
-  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model,
-      max_tokens: 600,
-      temperature: 0.7,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: prompt },
-      ],
-    }),
-  })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error?.message || `${provider} ${res.status}`)
-  return (data.choices?.[0]?.message?.content as string | undefined)?.trim() ?? ''
-}
-
-async function callGoogle(apiKey: string, model: string, prompt: string): Promise<string> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 600, temperature: 0.7 },
-      }),
-    },
-  )
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error?.message || `Google ${res.status}`)
+function clientIp(req: NextRequest): string {
   return (
-    (data.candidates?.[0]?.content?.parts?.[0]?.text as string | undefined)?.trim() ?? ''
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    req.headers.get('x-real-ip') ||
+    'unknown'
   )
 }
 
 export async function POST(req: NextRequest) {
-  let apiKey = req.headers.get('X-API-Key')
-  let provider = req.headers.get('X-Provider') || 'anthropic'
-  let model = req.headers.get('X-Model') || 'claude-sonnet-4-5'
-  let isFallback = false
-
-  if (!apiKey) {
-    const fallbackKey = process.env.ANTHROPIC_FALLBACK_KEY
-    if (!fallbackKey) {
-      return NextResponse.json(
-        { error: 'Configure your API key in Settings to use synthesis.', byokPrompt: true },
-        { status: 401 },
-      )
-    }
-
-    const ip =
-      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-      req.headers.get('x-real-ip') ||
-      'unknown'
-    const today = new Date().toISOString().split('T')[0]
-    const rlKey = `rl:${ip}:${today}`
-    const count = rateLimitMap.get(rlKey) || 0
-
-    if (count >= MAX_FREE_PER_DAY) {
-      return NextResponse.json(
-        {
-          error: `Free limit reached (${MAX_FREE_PER_DAY}/day). Add your API key for unlimited — Groq is free.`,
-          byokPrompt: true,
-          remaining: 0,
-        },
-        { status: 429 },
-      )
-    }
-
-    rateLimitMap.set(rlKey, count + 1)
-    apiKey = fallbackKey
-    provider = 'anthropic'
-    model = 'claude-haiku-4-5-20251001'
-    isFallback = true
+  const fallbackKey = process.env.ANTHROPIC_FALLBACK_KEY
+  if (!fallbackKey) {
+    return NextResponse.json({ error: 'service unavailable' }, { status: 503 })
   }
 
   const body = await req.json()
@@ -193,6 +153,53 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'tokenSymbol required' }, { status: 400 })
   }
 
+  // ── Resolve payment mode ────────────────────────────────────────────────────
+  const x402 = req.headers.get('X-PAYMENT')
+  let model = 'claude-haiku-4-5-20251001'
+  let isPaid = false
+
+  if (x402) {
+    const valid = await verifyX402(x402)
+    if (!valid) {
+      return NextResponse.json(
+        {
+          error: 'payment_required',
+          x402: {
+            scheme: 'exact',
+            network: X402_NETWORK,
+            maxAmountRequired: X402_PRICE,
+            resource: `${process.env.NEXT_PUBLIC_BASE_URL}/api/synth`,
+            description: 'BankrSynth Synthesis · $0.10 USDC.e',
+            payTo: process.env.SKALE_PAYMENT_RECIPIENT || '',
+            maxTimeoutSeconds: 300,
+            asset: USDC_SKALE_BASE,
+          },
+        },
+        { status: 402 },
+      )
+    }
+    model = 'claude-sonnet-4-5'
+    isPaid = true
+  } else {
+    const ip = clientIp(req)
+    const today = new Date().toISOString().split('T')[0]
+    const rlKey = `rl:${ip}:${today}`
+    const count = rateLimitMap.get(rlKey) || 0
+
+    if (count >= MAX_FREE_PER_DAY) {
+      return NextResponse.json(
+        {
+          error: `Free limit reached (${MAX_FREE_PER_DAY}/day). Connect wallet to pay $0.10 USDC.`,
+          x402Required: true,
+          remaining: 0,
+        },
+        { status: 429 },
+      )
+    }
+    rateLimitMap.set(rlKey, count + 1)
+  }
+
+  // ── Macro context ───────────────────────────────────────────────────────────
   let macroCtx = ''
   try {
     const cgRes = await fetch('https://api.coingecko.com/api/v3/global', {
@@ -236,35 +243,19 @@ export async function POST(req: NextRequest) {
 
   const prompt = PROMPTS[mode as keyof typeof PROMPTS](ctx)
 
+  // ── Synthesize ──────────────────────────────────────────────────────────────
   try {
-    let analysis = ''
-    const baseUrls: Record<string, string> = {
-      openai: 'https://api.openai.com',
-      groq: 'https://api.groq.com/openai',
-      xai: 'https://api.x.ai',
-      openrouter: 'https://openrouter.ai/api',
-    }
-
-    if (provider === 'anthropic') {
-      analysis = await callAnthropic(apiKey, model, prompt)
-    } else if (provider === 'google') {
-      analysis = await callGoogle(apiKey, model, prompt)
-    } else if (baseUrls[provider]) {
-      analysis = await callOpenAICompat(apiKey, model, prompt, baseUrls[provider], provider)
-    } else {
-      return NextResponse.json({ error: `Unknown provider: ${provider}` }, { status: 400 })
-    }
-
+    const analysis = await callAnthropic(fallbackKey, model, prompt)
     if (!analysis) {
-      return NextResponse.json({ error: 'Empty response from LLM' }, { status: 500 })
+      return NextResponse.json({ error: 'empty response' }, { status: 500 })
     }
+
+    // Settle the payment only after a successful synthesis.
+    if (isPaid && x402) await settle(x402)
 
     let remaining: number | null = null
-    if (isFallback) {
-      const ip =
-        req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-        req.headers.get('x-real-ip') ||
-        'unknown'
+    if (!isPaid) {
+      const ip = clientIp(req)
       const today = new Date().toISOString().split('T')[0]
       const used = rateLimitMap.get(`rl:${ip}:${today}`) || 0
       remaining = Math.max(0, MAX_FREE_PER_DAY - used)
@@ -274,22 +265,14 @@ export async function POST(req: NextRequest) {
       analysis,
       mode,
       symbol: tokenSymbol,
-      provider,
       model,
-      isFallback,
+      isPaid,
+      cost: isPaid ? '$0.10 USDC · SKALE Base · gasless' : 'free',
       remaining,
       timestamp: Date.now(),
     })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'synthesis failed'
-    const isAuthError =
-      msg.includes('401') ||
-      msg.toLowerCase().includes('invalid') ||
-      msg.toLowerCase().includes('api key') ||
-      msg.toLowerCase().includes('unauthorized')
-    return NextResponse.json(
-      { error: isAuthError ? 'Invalid API key — check your key in Settings.' : msg },
-      { status: isAuthError ? 401 : 500 },
-    )
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

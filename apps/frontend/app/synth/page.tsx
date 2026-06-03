@@ -1,8 +1,11 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import BYOKModal from '@/components/BYOKModal'
-import { loadBYOK, getFreeUsage, recordFreeUsage, FREE_LIMIT } from '@/lib/byok'
+import { useAccount } from 'wagmi'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { createX402Payment } from '@/lib/x402'
+
+const FREE_LIMIT = 5
 
 type Mode = 'analyze' | 'narrative' | 'thesis'
 type Bucket = 'trending' | 'new_launches' | 'high_volume' | 'ai_agents' | 'bankr_eco'
@@ -50,6 +53,7 @@ function fmtC(n: number): string {
 
 export default function SynthPage() {
   const router = useRouter()
+  const { address, isConnected } = useAccount()
   const [bucket, setBucket] = useState<Bucket>('trending')
   const [mode, setMode] = useState<Mode>('analyze')
   const [tokens, setTokens] = useState<Token[]>([])
@@ -62,18 +66,13 @@ export default function SynthPage() {
   const [outputMeta, setOutputMeta] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [showBYOK, setShowBYOK] = useState(false)
-  const [hasKey, setHasKey] = useState(false)
+  const [showConnectPrompt, setShowConnectPrompt] = useState(false)
   const [freeRemaining, setFreeRemaining] = useState(FREE_LIMIT)
   const [ticker, setTicker] = useState(0)
 
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const typewriterRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  useEffect(() => {
-    setHasKey(!!loadBYOK())
-    setFreeRemaining(getFreeUsage().remaining)
-  }, [])
   useEffect(() => { const t = setInterval(() => setTicker((n) => n + 1), 1000); return () => clearInterval(t) }, [])
 
   const fetchTokens = useCallback(async () => {
@@ -134,28 +133,52 @@ export default function SynthPage() {
     }, 300)
   }
 
+  function typewriterOutput(text: string) {
+    if (typewriterRef.current) clearInterval(typewriterRef.current)
+    let i = 0
+    typewriterRef.current = setInterval(() => {
+      i++
+      setOutput(text.slice(0, i))
+      if (i >= text.length && typewriterRef.current) clearInterval(typewriterRef.current)
+    }, 12)
+  }
+
   async function synthesize() {
     if (!selectedToken) return
-
-    const config = loadBYOK()
 
     if (typewriterRef.current) clearInterval(typewriterRef.current)
     setLoading(true)
     setOutput('')
     setOutputMeta('')
     setError('')
+    setShowConnectPrompt(false)
 
-    const reqHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (config) {
-      reqHeaders['X-API-Key'] = config.apiKey
-      reqHeaders['X-Provider'] = config.provider
-      reqHeaders['X-Model'] = config.model
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+
+    // Wallet connected → sign a gasless $0.10 USDC.e x402 payment (Sonnet 4.5).
+    if (isConnected && address) {
+      setOutput('> signing payment...')
+      const recipient = process.env.NEXT_PUBLIC_SKALE_PAYMENT_RECIPIENT
+      if (!recipient) {
+        setLoading(false)
+        setOutput('')
+        setError('Payment recipient not configured. Contact support.')
+        return
+      }
+      const payment = await createX402Payment(address, recipient)
+      if (!payment) {
+        setLoading(false)
+        setOutput('')
+        setError('Payment failed. Get USDC.e at base.skalenodes.com/credits')
+        return
+      }
+      headers['X-PAYMENT'] = payment
     }
 
     try {
       const res = await fetch('/api/synth', {
         method: 'POST',
-        headers: reqHeaders,
+        headers,
         body: JSON.stringify({
           mode,
           tokenSymbol: selectedToken.symbol,
@@ -172,42 +195,34 @@ export default function SynthPage() {
       })
 
       const data = (await res.json()) as {
-        analysis?: string; error?: string; provider?: string; model?: string
-        isFallback?: boolean; remaining?: number; byokPrompt?: boolean
+        analysis?: string; error?: string; model?: string
+        isPaid?: boolean; remaining?: number | null
       }
       setLoading(false)
 
       if (res.status === 429) {
-        setError(data.error ?? `Free limit reached (${FREE_LIMIT}/day). Add your API key for unlimited.`)
-        setShowBYOK(true)
+        setOutput('')
+        setError('Free limit reached (5/day). Connect wallet → pay $0.10 USDC.')
+        setFreeRemaining(0)
+        setShowConnectPrompt(true)
         return
       }
-      if (res.status === 401) {
-        setShowBYOK(true)
+      if (res.status === 402) {
+        setOutput('')
+        setError('Payment failed. Need USDC.e on SKALE Base.')
         return
       }
-      if (!res.ok || data.error) { setError(data.error ?? 'Synthesis failed'); return }
+      if (!res.ok || data.error) { setOutput(''); setError(data.error ?? 'synthesis failed'); return }
 
-      if (data.isFallback) {
-        recordFreeUsage(data.remaining)
-        const rem = data.remaining ?? 0
-        setFreeRemaining(rem)
-        setOutputMeta(`via BankrSynth · free (${rem} remaining today)`)
-      } else {
-        setOutputMeta(`via ${data.provider}/${data.model} · your key`)
-      }
+      if (!data.isPaid && typeof data.remaining === 'number') setFreeRemaining(data.remaining)
+      setOutputMeta(data.isPaid
+        ? '✓ $0.10 USDC · SKALE Base · gasless'
+        : `✓ free · ${data.remaining ?? 0} remaining today`)
 
-      const text = data.analysis ?? ''
-      let i = 0
-      typewriterRef.current = setInterval(() => {
-        i++
-        setOutput(text.slice(0, i))
-        if (i >= text.length) {
-          if (typewriterRef.current) clearInterval(typewriterRef.current)
-        }
-      }, 12)
+      typewriterOutput(data.analysis ?? '')
     } catch {
       setLoading(false)
+      setOutput('')
       setError('Network error — synthesis request failed')
     }
   }
@@ -268,13 +283,16 @@ export default function SynthPage() {
             ))}
           </div>
 
-          {/* Free / BYOK status hint */}
-          {!hasKey && (
-            <div style={{ padding: '7px 12px', border: `1px solid ${freeRemaining > 0 ? 'rgba(0,255,65,0.15)' : 'rgba(255,165,0,0.3)'}`, background: freeRemaining > 0 ? 'rgba(0,255,65,0.03)' : 'rgba(255,165,0,0.04)', fontSize: '10px', color: freeRemaining > 0 ? 'rgba(0,255,65,0.6)' : 'rgba(255,165,0,0.7)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {/* Payment mode hint */}
+          {isConnected ? (
+            <div style={{ padding: '7px 12px', border: '1px solid rgba(0,255,65,0.2)', background: 'rgba(0,255,65,0.04)', fontSize: '10px', color: 'rgba(0,255,65,0.65)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ color: 'var(--green)' }}>⚡</span>
+              <span>$0.10 USDC.e per synthesis · Sonnet 4.5 · gasless on SKALE Base</span>
+            </div>
+          ) : (
+            <div style={{ padding: '7px 12px', border: `1px solid ${freeRemaining > 0 ? 'rgba(0,255,65,0.15)' : 'rgba(255,165,0,0.3)'}`, background: freeRemaining > 0 ? 'rgba(0,255,65,0.03)' : 'rgba(255,165,0,0.04)', fontSize: '10px', color: freeRemaining > 0 ? 'rgba(0,255,65,0.6)' : 'rgba(255,165,0,0.7)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
               <span>{freeRemaining > 0 ? `free · ${freeRemaining}/${FREE_LIMIT} remaining today` : `free limit reached (${FREE_LIMIT}/day)`}</span>
-              <button onClick={() => setShowBYOK(true)} style={{ background: 'none', border: `1px solid ${freeRemaining > 0 ? 'rgba(0,255,65,0.2)' : 'rgba(255,165,0,0.3)'}`, color: freeRemaining > 0 ? 'rgba(0,255,65,0.5)' : 'rgba(255,165,0,0.7)', cursor: 'pointer', fontSize: '9px', padding: '3px 8px', letterSpacing: '0.1em', fontFamily: 'var(--font-mono)' }}>
-                {freeRemaining > 0 ? 'add key →' : 'Groq is free →'}
-              </button>
+              <span style={{ flexShrink: 0 }}><ConnectButton showBalance={false} accountStatus="address" chainStatus="none" /></span>
             </div>
           )}
 
@@ -297,7 +315,7 @@ export default function SynthPage() {
             {loading
               ? '◉ SYNTHESIZING...'
               : selectedToken
-                ? `◉ SYNTHESIZE ${selectedToken.symbol}${mode !== 'analyze' ? ` — ${mode.toUpperCase()}` : ''}${!hasKey ? ` · free` : ''}`
+                ? `◉ SYNTHESIZE ${selectedToken.symbol}${mode !== 'analyze' ? ` — ${mode.toUpperCase()}` : ''}${isConnected ? ' · $0.10 USDC' : ' · free'}`
                 : '◉ SELECT TOKEN TO SYNTHESIZE'}
           </button>
 
@@ -377,8 +395,19 @@ export default function SynthPage() {
         </div>
       </div>
 
-      {showBYOK && (
-        <BYOKModal onClose={() => { setShowBYOK(false); setHasKey(!!loadBYOK()); setFreeRemaining(getFreeUsage().remaining) }} />
+      {showConnectPrompt && !isConnected && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={() => setShowConnectPrompt(false)}>
+          <div className="connect-prompt" onClick={(e) => e.stopPropagation()} style={{ background: 'rgba(0,8,2,0.97)', border: '1px solid rgba(0,255,65,0.3)', boxShadow: '0 0 40px rgba(0,255,65,0.08)', padding: '24px', width: '100%', maxWidth: '420px', fontFamily: 'var(--font-mono)', display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center', textAlign: 'center' }}>
+            <p style={{ fontSize: '12px', color: 'var(--green)', letterSpacing: '0.05em', margin: 0 }}>5 free syntheses used today.</p>
+            <ConnectButton showBalance={false} />
+            <p className="note" style={{ fontSize: '10px', color: 'rgba(0,255,65,0.5)', lineHeight: 1.6, margin: 0 }}>
+              Connect wallet → $0.10 USDC.e per synthesis · no gas · SKALE Base
+            </p>
+            <a href="https://base.skalenodes.com/credits" target="_blank" rel="noopener noreferrer" style={{ fontSize: '10px', color: 'rgba(0,200,255,0.7)', textDecoration: 'none', letterSpacing: '0.1em' }}>
+              Get USDC.e →
+            </a>
+          </div>
+        </div>
       )}
     </main>
   )

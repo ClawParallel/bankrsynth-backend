@@ -7,6 +7,7 @@ import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
 import { useState } from 'react'
 import '@rainbow-me/rainbowkit/styles.css'
 import WalletAuthGate from './WalletAuthGate'
+import { skaleBase } from '@/lib/chains'
 
 // Native wagmi v3 connectors (RainbowKit's connectorsForWallets targets wagmi v2
 // and silently fails to connect on v3). These actually fire the wallet prompt.
@@ -21,15 +22,16 @@ const connectors = [
 ]
 
 const config = createConfig({
-  chains: [base, mainnet, optimism, arbitrum, polygon, bsc],
+  chains: [base, skaleBase, mainnet, optimism, arbitrum, polygon, bsc],
   connectors,
   transports: {
-    [base.id]:     http('https://mainnet.base.org'),
-    [mainnet.id]:  http(),
-    [optimism.id]: http(),
-    [arbitrum.id]: http(),
-    [polygon.id]:  http(),
-    [bsc.id]:      http(),
+    [base.id]:      http('https://mainnet.base.org'),
+    [skaleBase.id]: http('https://skale-base.skalenodes.com/v1/base'),
+    [mainnet.id]:   http(),
+    [optimism.id]:  http(),
+    [arbitrum.id]:  http(),
+    [polygon.id]:   http(),
+    [bsc.id]:       http(),
   },
   ssr: true,
 })
