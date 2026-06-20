@@ -12,6 +12,7 @@ const modules = [
   { href: '/arena',    label: 'ARENA',    icon: '⚔' },
   { href: '/swarm',    label: 'SWARM',    icon: '⬟' },
   { href: '/repos',    label: 'REPOS',    icon: '⬢' },
+  { href: '/api',      label: 'API',      icon: '⟁' },
 ]
 
 export default function Nav() {
