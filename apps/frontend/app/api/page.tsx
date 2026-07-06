@@ -132,7 +132,7 @@ export default function ApiDocsPage() {
       <div style={{ maxWidth: '880px', margin: '0 auto' }}>
         {/* Hero */}
         <div style={{ marginBottom: '24px' }}>
-          <p style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'rgba(0,255,65,0.35)' }}>BANKRSYNTH://API/V1</p>
+          <p style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'rgba(0,255,65,0.35)' }}>SYNTHVIRTUAL://API/V1</p>
           <h1
             style={{
               fontFamily: 'var(--font-display)',
@@ -144,7 +144,7 @@ export default function ApiDocsPage() {
               marginTop: '6px',
             }}
           >
-            BANKRSYNTH INTELLIGENCE API
+            SYNTHVIRTUAL INTELLIGENCE API
           </h1>
           <p style={{ fontSize: '13px', color: 'rgba(0,255,65,0.7)', marginTop: '8px', lineHeight: 1.6 }}>
             AI synthesis for any Base token.

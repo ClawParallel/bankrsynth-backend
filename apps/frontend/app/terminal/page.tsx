@@ -60,7 +60,7 @@ export default function TerminalPage() {
     const welcome: Message = {
       id: mkId(),
       role: 'assistant',
-      content: `BankrSynth AI Terminal — online.\nBase network · live data · ${new Date().toUTCString()}\n\nAsk me anything: token prices, market analysis, trending tokens, whale activity, portfolio review.\nNo commands needed — just type naturally.`,
+      content: `SynthVirtual AI Terminal — online.\nBase network · live data · ${new Date().toUTCString()}\n\nAsk me anything: token prices, market analysis, trending tokens, whale activity, portfolio review.\nNo commands needed — just type naturally.`,
       ts: Date.now(),
     }
     setMessages([welcome])
@@ -158,7 +158,7 @@ export default function TerminalPage() {
       {/* Header */}
       <div style={{ padding: '8px 16px', borderBottom: '1px solid rgba(0,255,65,0.1)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
         <div>
-          <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.3em' }}>BANKRSYNTH://</span>
+          <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.3em' }}>SYNTHVIRTUAL://</span>
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(13px,2vw,18px)', fontWeight: 700, letterSpacing: '0.2em', color: 'var(--green)', textShadow: '0 0 20px rgba(0,255,65,0.4)' }}>
             ▶ AI TERMINAL
           </h1>
@@ -222,7 +222,7 @@ export default function TerminalPage() {
                 <span style={{ fontSize: '10px', color: 'var(--green)' }}>◉</span>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.15em', marginBottom: '5px', fontFamily: 'var(--font-display)' }}>BANKRSYNTH</div>
+                <div style={{ fontSize: '9px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.15em', marginBottom: '5px', fontFamily: 'var(--font-display)' }}>SYNTHVIRTUAL</div>
                 <div style={{
                   padding: '10px 14px',
                   background: 'rgba(0,6,2,0.85)',

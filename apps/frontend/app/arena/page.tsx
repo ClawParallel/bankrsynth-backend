@@ -416,7 +416,7 @@ export default function ArenaPage() {
   return (
     <main style={{ minHeight: '100dvh', paddingTop: 'clamp(52px,8vw,56px)', background: '#000', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '8px 16px', borderBottom: '1px solid rgba(0,255,65,0.1)', flexShrink: 0 }}>
-        <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.3em' }}>BANKRSYNTH://</span>
+        <span style={{ fontSize: '9px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.3em' }}>SYNTHVIRTUAL://</span>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(13px,2vw,18px)', fontWeight: 700, letterSpacing: '0.2em', color: 'var(--green)', textShadow: '0 0 20px rgba(0,255,65,0.4)' }}>
           ⚔ ARENA — LIVE DEX TRADING
         </h1>

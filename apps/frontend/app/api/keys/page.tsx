@@ -41,7 +41,7 @@ export default function KeysPage() {
           </Link>
         </div>
 
-        <p style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'rgba(0,255,65,0.35)' }}>BANKRSYNTH://API/KEYS</p>
+        <p style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'rgba(0,255,65,0.35)' }}>SYNTHVIRTUAL://API/KEYS</p>
         <h1
           style={{
             fontFamily: 'var(--font-display)',

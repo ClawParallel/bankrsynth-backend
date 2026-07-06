@@ -69,7 +69,7 @@ export async function POST() {
         max_tokens: 600,
         messages: [{
           role: 'user',
-          content: `You are BankrSynth — AI intelligence layer for Base ecosystem.
+          content: `You are SynthVirtual — AI intelligence layer for Base ecosystem.
 Generate a market brief from this live data.
 
 Structure (plain text, labeled):

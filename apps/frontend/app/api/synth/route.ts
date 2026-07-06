@@ -27,7 +27,7 @@ const PAYMENT_REQUIREMENTS = {
   asset: USDC_SKALE_BASE,
   maxAmountRequired: X402_PRICE,
   resource: `${process.env.NEXT_PUBLIC_BASE_URL}/api/synth`,
-  description: 'BankrSynth AI Synthesis · $0.10 USDC.e',
+  description: 'SynthVirtual AI Synthesis · $0.10 USDC.e',
   mimeType: 'application/json',
   payTo: process.env.SKALE_PAYMENT_RECIPIENT || '',
   maxTimeoutSeconds: 300,
@@ -37,7 +37,7 @@ const PAYMENT_REQUIREMENTS = {
   },
 }
 
-const SYSTEM_PROMPT = `You are BankrSynth — an AI intelligence synthesis engine for Base ecosystem tokens.
+const SYSTEM_PROMPT = `You are SynthVirtual — an AI intelligence synthesis engine for Base ecosystem tokens.
 You provide structured, concise market analysis for crypto traders.
 Be direct, technical, and opinionated. No hedging. No disclaimers.
 Write in plain text only — no markdown headers, no bullet symbols, no asterisks.`

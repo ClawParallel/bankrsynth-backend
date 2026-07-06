@@ -378,7 +378,7 @@ export async function POST(req: NextRequest) {
   }
   rateLimitMap.set(rlKey, count + 1)
 
-  const system = `You are BankrSynth — an AI intelligence terminal for Base ecosystem tokens and crypto markets.
+  const system = `You are SynthVirtual — an AI intelligence terminal for Base ecosystem tokens and crypto markets.
 
 You have live data tools. ALWAYS call them when users ask about:
 - Specific tokens (price, analysis, performance)

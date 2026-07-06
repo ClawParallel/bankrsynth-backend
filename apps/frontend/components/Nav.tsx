@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useAccount } from 'wagmi'
+import Logo from './Logo'
 
 const modules = [
   { href: '/synth',    label: 'SYNTH',    icon: '◉' },
@@ -40,11 +41,14 @@ export default function Nav() {
     <>
       <nav className="nav-bar">
         <Link href="/" className="no-underline flex-shrink-0">
-          <div>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(12px,1.8vw,18px)', letterSpacing: '0.2em', color: 'var(--green)', textShadow: '0 0 20px var(--green)' }}>BANKR</span>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(12px,1.8vw,18px)', letterSpacing: '0.2em', color: 'var(--red)', textShadow: '0 0 20px var(--red)' }}>SYNTH</span>
-            <div className="hide-mobile" style={{ fontSize: '8px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.15em', marginTop: '1px' }}>
-              AI-NATIVE AUTONOMOUS TERMINAL ◆ NODE: 0xF4a9
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Logo size={26} />
+            <div>
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(12px,1.8vw,18px)', letterSpacing: '0.2em', color: 'var(--green)', textShadow: '0 0 20px var(--green)' }}>SYNTH</span>
+              <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 'clamp(12px,1.8vw,18px)', letterSpacing: '0.2em', color: '#fff', textShadow: '0 0 12px rgba(0,255,65,0.5)' }}>VIRTUAL</span>
+              <div className="hide-mobile" style={{ fontSize: '8px', color: 'rgba(0,255,65,0.35)', letterSpacing: '0.15em', marginTop: '1px' }}>
+                AI-NATIVE INTELLIGENCE TERMINAL ◆ NODE: 0xF4a9
+              </div>
             </div>
           </div>
         </Link>
@@ -134,13 +138,16 @@ export default function Nav() {
       <div className={`mobile-drawer sm:hidden ${menuOpen ? 'open' : ''}`} role="navigation">
         {/* Drawer header */}
         <div className="mobile-drawer-header">
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Logo size={24} />
+            <div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '14px', letterSpacing: '0.2em' }}>
-              <span style={{ color: 'var(--green)', textShadow: '0 0 20px var(--green)' }}>BANKR</span>
-              <span style={{ color: 'var(--red)', textShadow: '0 0 20px var(--red)' }}>SYNTH</span>
+              <span style={{ color: 'var(--green)', textShadow: '0 0 20px var(--green)' }}>SYNTH</span>
+              <span style={{ color: '#fff', textShadow: '0 0 12px rgba(0,255,65,0.5)' }}>VIRTUAL</span>
             </div>
             <div style={{ fontSize: '8px', color: 'rgba(0,255,65,0.3)', letterSpacing: '0.15em', marginTop: '3px' }}>
               ◉ {clock} │ BLK #{blockNum.toLocaleString()}
+            </div>
             </div>
           </div>
           <button
@@ -169,7 +176,7 @@ export default function Nav() {
             <div className="status-dot" style={{ width: '6px', height: '6px' }} />
             <span>NODE: 0xF4a9 — BASE MAINNET</span>
           </div>
-          <div style={{ color: 'rgba(0,255,65,0.2)' }}>AI-NATIVE AUTONOMOUS TERMINAL</div>
+          <div style={{ color: 'rgba(0,255,65,0.2)' }}>AI-NATIVE INTELLIGENCE TERMINAL · LAUNCHED ON VIRTUALS PROTOCOL</div>
         </div>
       </div>
     </>

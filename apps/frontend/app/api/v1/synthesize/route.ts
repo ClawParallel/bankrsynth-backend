@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// BankrSynth Intelligence API — public, free, no signup.
+// SynthVirtual Intelligence API — public, free, no signup.
 // POST /api/v1/synthesize  { token, mode, chain }
 //
 // Anthropic is called via raw fetch (same approach as /api/synth) so we don't
@@ -329,7 +329,7 @@ export async function POST(req: NextRequest) {
           model: 'claude-haiku-4-5',
           latencyMs: Date.now() - t0,
           remaining,
-          poweredBy: 'BankrSynth',
+          poweredBy: 'SynthVirtual',
           docsUrl: 'https://synthterminal.app/api',
         },
       },

@@ -11,7 +11,7 @@ function buildMessage(address: string, chainId: number, nonce: string, issuedAt:
     `${domain} wants you to verify wallet ownership:`,
     address,
     '',
-    'Sign to securely access BankrSynth. This is a read-only signature — it does NOT trigger a transaction, move funds, or cost any gas.',
+    'Sign to securely access SynthVirtual. This is a read-only signature — it does NOT trigger a transaction, move funds, or cost any gas.',
     '',
     `URI: ${uri}`,
     'Version: 1',
@@ -89,13 +89,13 @@ export default function WalletAuthGate() {
           padding: '22px',
         }}
       >
-        <div style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'rgba(0,255,65,0.4)' }}>BANKRSYNTH://</div>
+        <div style={{ fontSize: '9px', letterSpacing: '0.3em', color: 'rgba(0,255,65,0.4)' }}>SYNTHVIRTUAL://</div>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: 700, letterSpacing: '0.15em', color: 'var(--green)', textShadow: '0 0 16px rgba(0,255,65,0.4)', marginTop: '6px' }}>
           ◈ VERIFY WALLET
         </h2>
 
         <p style={{ fontSize: '11px', color: 'rgba(0,255,65,0.6)', lineHeight: 1.7, marginTop: '12px' }}>
-          Sign a message to verify you own this wallet and securely unlock BankrSynth.
+          Sign a message to verify you own this wallet and securely unlock SynthVirtual.
         </p>
 
         <div style={{ marginTop: '10px', padding: '8px 10px', border: '1px solid rgba(0,255,65,0.12)', background: 'rgba(0,255,65,0.03)', fontSize: '10px', color: 'rgba(0,255,65,0.5)', lineHeight: 1.7 }}>
