@@ -17,6 +17,11 @@ export const metadata: Metadata = {
   },
   description: DESCRIPTION,
   applicationName: 'SynthVirtual',
+  verification: {
+    other: {
+      'virtual-protocol-site-verification': '573d88d7918ca7119c1e7cce98f2662c',
+    },
+  },
   icons: {
     icon: '/icon',
     apple: '/apple-icon',
